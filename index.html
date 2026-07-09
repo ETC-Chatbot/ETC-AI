@@ -797,7 +797,7 @@
         let authMode = "login";
 
         // ⚠️ แก้บรรทัดนี้ทุกครั้งที่รัน ngrok ใหม่
-        let currentNgrokUrl = "https://karma-trustable-womanlike.ngrok-free.app";
+        let currentNgrokUrl = "https://karma-trustable-womanlike.ngrok-free.dev";
 
         // ============================================================
         // Firebase — init ครั้งเดียว
@@ -1124,7 +1124,7 @@
             const botId = 'bot-' + Date.now();
             cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-bot"><img src="img/ETC.png" class="avatar-img" onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('avatar-fallback');this.innerText='ETC';"><div class="chat-bubble" id="${botId}">ETC กำลังคิด...</div></div>`);
             try {
-                const aiUrl = currentNgrokUrl ? currentNgrokUrl + "/v1/chat/completions" : "http://127.0.0.1:1234/v1/chat/completions";
+                const aiUrl = currentNgrokUrl ? currentNgrokUrl + "/v1/chat/completions" : "http://127.0.0.1:1234";
                 const res = await fetch(aiUrl, { method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer lm-studio","ngrok-skip-browser-warning":"true"}, signal:currentController.signal, body:JSON.stringify({ model:"local-model", messages:chatHistory, stream:true, temperature:getTemperatureForText(text) }) });
                 const reader = res.body.getReader();
                 const decoder = new TextDecoder("utf-8");
