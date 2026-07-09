@@ -5,9 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ETC AI</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <!-- ===== เพิ่มใหม่: Firebase SDK สำหรับระบบล็อกอิน ===== -->
+    <!-- ===== Firebase SDK ===== -->
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <!-- ===== เพิ่มใหม่: Firestore SDK สำหรับเก็บประวัติแชท ===== -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; display: flex; height: 100vh; overflow: hidden; background-color: #000; }
         .icon-sidebar { width: 68px; background-color: #0e0e0e; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 20px 0; box-sizing: border-box; flex-shrink: 0; z-index: 10; border-right: 1px solid #222; }
@@ -570,6 +572,38 @@
             margin-left: 8px;
             color: #2ecc71;
         }
+
+        /* ===== เพิ่มใหม่: CSS หน้าประวัติแชทและค้นหา ===== */
+        .history-overlay, .search-overlay {
+            display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 22; flex-direction: column;
+            background: rgba(5, 2, 15, 0.97); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            animation: fadeInUpgrade 0.3s ease;
+        }
+        .history-overlay.show, .search-overlay.show { display: flex; }
+        .history-header, .search-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; border-bottom: 1px solid rgba(255,255,255,0.08); flex-shrink: 0; }
+        .history-header h2, .search-header h2 { color: #f0eaff; font-size: 18px; }
+        .history-close-btn, .search-close-btn { background: rgba(255,255,255,0.06); border: none; color: #c4c7c5; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 14px; }
+        .history-close-btn:hover, .search-close-btn:hover { background: rgba(255,255,255,0.15); }
+        .history-body, .search-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+        .history-body::-webkit-scrollbar, .search-body::-webkit-scrollbar { width: 6px; }
+        .history-body::-webkit-scrollbar-thumb, .search-body::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+        .chat-session-card { background: rgba(38, 26, 64, 0.6); border: 1px solid rgba(168, 199, 250, 0.1); border-radius: 14px; padding: 14px 16px; margin-bottom: 10px; cursor: pointer; transition: background 0.2s, border-color 0.2s; display: flex; align-items: center; gap: 10px; }
+        .chat-session-card:hover { background: rgba(60, 40, 100, 0.7); border-color: rgba(168, 199, 250, 0.25); }
+        .session-info { flex: 1; min-width: 0; }
+        .session-title { color: #e0d8f0; font-size: 14px; font-weight: 500; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .session-meta { color: #7a7590; font-size: 12px; }
+        .session-delete-btn { background: none; border: none; color: #e74c3c; font-size: 18px; cursor: pointer; padding: 0 4px; opacity: 0.5; flex-shrink: 0; }
+        .session-delete-btn:hover { opacity: 1; }
+        .history-empty { text-align: center; color: #5a5570; margin-top: 60px; font-size: 15px; line-height: 2; }
+        .search-input-wrap { padding: 14px 20px; flex-shrink: 0; }
+        .search-input-box { width: 100%; background: rgba(38, 26, 64, 0.75); border: 1px solid rgba(168, 199, 250, 0.2); border-radius: 16px; padding: 12px 18px; color: #f0eaff; font-size: 15px; outline: none; box-sizing: border-box; }
+        .search-input-box:focus { border-color: #a8c7fa; }
+        .search-input-box::placeholder { color: #5a5570; }
+        .search-result-msg { color: #8a8597; font-size: 13px; padding: 4px 0 10px; }
+        .search-highlight { background: rgba(168, 199, 250, 0.25); border-radius: 3px; padding: 0 2px; }
+        .new-chat-btn { width: 100%; background: rgba(168,199,250,0.1); border: 1px dashed rgba(168,199,250,0.3); border-radius: 14px; padding: 14px; color: #a8c7fa; font-size: 14px; cursor: pointer; margin-bottom: 14px; transition: background 0.2s; }
+        .new-chat-btn:hover { background: rgba(168,199,250,0.2); }
     </style>
 </head>
 <body>
@@ -580,10 +614,12 @@
                 <!-- ===== แก้ไข: เปลี่ยน onerror จากซ่อนรูป เป็นแสดงวงกลม gradient fallback แทนไอคอนแตก (เผื่อไฟล์ ETC.png เสีย/เปิดไม่ได้) ===== -->
                 <img src="img/ETC.png" alt="ETC Logo" class="logo-spin" onerror="this.onerror=null; this.removeAttribute('src'); this.classList.add('logo-fallback');">
             </div>
-            <!-- ===== แก้ไข: เปลี่ยน emoji 3 อันให้สื่อถึงอิเล็กทรอนิกส์ (เดิม ✎ 🔍 ⊞) เป็น ⚡🔬💾 พร้อมใส่คลาส electronic-icon เพื่อเรืองแสง neon ===== -->
+            <!-- ===== แก้ไข: เปลี่ยน emoji 3 อันให้สื่อถึงอิเล็กทรอนิกส์ ===== -->
             <div class="menu-icon electronic-icon" onclick="location.reload()" title="เริ่มแชทใหม่">⚡</div>
-            <div class="menu-icon electronic-icon" title="ค้นหา">🔬</div>
-            <div class="menu-icon electronic-icon" title="เมนู">💾</div>
+            <!-- ===== แก้ไข: 🔬 → เปิดหน้าค้นหาประวัติแชท ===== -->
+            <div class="menu-icon electronic-icon" onclick="showSearchPage()" title="ค้นหาประวัติแชท">🔬</div>
+            <!-- ===== แก้ไข: 💾 → เปิดหน้าประวัติแชท ===== -->
+            <div class="menu-icon electronic-icon" onclick="showHistoryPage()" title="ประวัติแชท">💾</div>
         </div>
         <div class="bottom-icons">
             <!-- ===== แก้ไข: เพิ่ม onclick ให้ไอคอนตั้งค่าเปิดหน้า Settings และเปลี่ยน "ME" เป็น id แบบไดนามิก เพื่ออัปเดตชื่อ/รูปตามที่ผู้ใช้ตั้งค่า ===== -->
@@ -681,13 +717,48 @@
         </div>
 
         <!-- ===== เพิ่มใหม่: popup แสดงรูปโลโก้ขนาดใหญ่กลางจอ เมื่อกดที่โลโก้หมุนซ้ายบน ===== -->
+        <!-- ===== เพิ่มใหม่: หน้าประวัติแชท ===== -->
+        <div id="historyPage" class="history-overlay">
+            <div class="history-header">
+                <h2>💾 ประวัติแชท</h2>
+                <button class="history-close-btn" onclick="hideHistoryPage()">✕</button>
+            </div>
+            <div class="history-body" id="historyBody">
+                <button class="new-chat-btn" onclick="startNewChat()">+ เริ่มแชทใหม่</button>
+                <div id="historyList"></div>
+            </div>
+        </div>
+
+        <!-- ===== เพิ่มใหม่: หน้าค้นหาประวัติแชท ===== -->
+        <div id="searchPage" class="search-overlay">
+            <div class="search-header">
+                <h2>🔬 ค้นหาประวัติแชท</h2>
+                <button class="search-close-btn" onclick="hideSearchPage()">✕</button>
+            </div>
+            <div class="search-input-wrap">
+                <input type="text" class="search-input-box" id="searchInput" placeholder="พิมพ์คำที่ต้องการค้นหา..." oninput="handleSearch(this.value)" autocomplete="off">
+            </div>
+            <div class="search-body" id="searchBody">
+                <div class="history-empty">พิมพ์คำค้นหาด้านบนค่ะ</div>
+            </div>
+        </div>
+
         <div id="logoPopup" class="logo-popup-overlay" onclick="hideLogoPopup()">
             <img src="img/ETC.png" alt="ETC Logo Large" class="logo-popup-img" onerror="this.onerror=null; this.style.display='none';">
         </div>
     </div>
 
-    <!-- ===== เพิ่มใหม่: หน้า Login/Register overlay (อยู่นอก main-container เพื่อคลุมทั้งหน้าจอ) ===== -->
-    <div id="authOverlay" class="auth-overlay show">
+    <!-- ===== แก้ไข: ลบ show ออก ให้ Firebase เช็ค session ก่อนค่อยแสดง Login ===== -->
+    <!-- Loading screen แสดงระหว่าง Firebase เช็ค session -->
+    <div id="loadingScreen" style="position:fixed;top:0;left:0;right:0;bottom:0;background:#050210;z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;">
+        <div style="position:relative;width:72px;height:72px;display:flex;align-items:center;justify-content:center;">
+            <div style="position:absolute;width:80px;height:80px;border-radius:50%;background:conic-gradient(from 0deg,#ffb4a2,#a8c7fa,#9c27b0,#ffb4a2);filter:blur(1px);animation:rotateLogo 3s linear infinite;"></div>
+            <img src="img/ETC.png" style="width:60px;height:60px;border-radius:50%;object-fit:cover;border:2px solid rgba(168,199,250,0.3);animation:rotateLogo 8s linear infinite;position:relative;z-index:2;" onerror="this.style.display='none'">
+        </div>
+        <div style="color:#8a8597;font-size:13px;">กำลังโหลด...</div>
+    </div>
+
+    <div id="authOverlay" class="auth-overlay">
         <div class="auth-card">
             <!-- ===== แก้ไข: เปลี่ยนจาก emoji 🤖 เป็นรูปโลโก้ ETC.png พร้อม animation หมุนและเรืองแสงเหมือน sidebar ===== -->
             <div class="auth-logo">
@@ -696,9 +767,10 @@
             <div class="auth-title" id="authTitle">เข้าสู่ระบบ</div>
             <div class="auth-subtitle" id="authSubtitle">เข้าสู่ระบบเพื่อใช้งาน ETC AI</div>
             <div class="auth-error" id="authError"></div>
-            <input type="text" class="auth-input" id="authName" placeholder="ชื่อของคุณ" autocomplete="off" style="display:none">
-            <input type="email" class="auth-input" id="authEmail" placeholder="อีเมล" autocomplete="off">
-            <input type="password" class="auth-input" id="authPassword" placeholder="รหัสผ่าน" autocomplete="off">
+            <!-- ===== แก้ไข: เปลี่ยนเป็น type=text เพื่อให้แป้นพิมพ์ภาษาไทยบนมือถือทำงานได้ปกติ ===== -->
+            <input type="text" class="auth-input" id="authName" placeholder="ชื่อของคุณ (ภาษาไทยได้เลยค่ะ)" autocomplete="off" lang="th" style="display:none">
+            <input type="text" class="auth-input" id="authEmail" placeholder="อีเมล เช่น example@gmail.com" autocomplete="off" inputmode="email">
+            <input type="password" class="auth-input" id="authPassword" placeholder="รหัสผ่าน (อย่างน้อย 6 ตัว)" autocomplete="off">
             <button class="auth-btn" id="authSubmitBtn" onclick="handleAuthSubmit()">เข้าสู่ระบบ</button>
             <div class="auth-switch" id="authSwitch">
                 ยังไม่มีบัญชี? <span onclick="switchToRegister()">สมัครสมาชิก</span>
@@ -706,313 +778,133 @@
         </div>
     </div>
 
-    <script>
+        <script>
+        // ============================================================
+        // ตัวแปรหลัก
+        // ============================================================
         const now = new Date();
         const today = now.toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         const timeNow = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-        
-        let chatHistory = [{ 
-            role: "system", 
-            // ===== แก้ไข: ปรับกฎข้อ 1 และ 6 ให้เจาะจงเฉพาะเรื่องวันที่/เวลา ไม่ห้ามขยายความทุกเรื่อง เพิ่มกฎให้ทักทายเป็นมิตรและแนะนำสิ่งที่เป็นประโยชน์ได้ตามปกติ =====
-            content: `คุณคือ ETC เลขาสาวผู้ชาญฉลาด เพศหญิง คุณมีความเชี่ยวชาญพิเศษด้านวิทยาศาสตร์และอิเล็กทรอนิกส์ แต่คุณสามารถตอบคำถามทั่วไป ประวัติศาสตร์ หรือเรื่องอื่นๆ ได้อย่างครบถ้วนและสุภาพ | กฎสำคัญที่ต้องทำตามเสมอ: 1. ให้ข้อมูลที่ถูกต้องแม่นยำและเป็นประโยชน์ ตอบให้ครบถ้วนตามที่ผู้ใช้ต้องการ สามารถพูดคุยทักทายเป็นมิตรและแนะนำสิ่งที่เป็นประโยชน์เพิ่มเติมได้ตามความเหมาะสม | 2. ห้ามพูดถึงวันที่หรือเวลาในคำตอบโดยเด็ดขาด ยกเว้นผู้ใช้ถามเรื่องวันที่หรือเวลาโดยตรงเท่านั้น ถ้าถูกถามจริงๆ ค่อยตอบว่าปัจจุบันคือ ${today} เวลา ${timeNow} น. | 3. หากเป็นคำถามด้านวิทยาศาสตร์หรืออิเล็กทรอนิกส์ให้ตอบด้วยความเชี่ยวชาญเป็นพิเศษ | 4. ลงท้ายประโยคด้วย 'ค่ะ' เสมอ | 5. ห้ามใช้คำว่า 'ครับ' 'ผม' หรือสรรพนามและคำลงท้ายแบบเพศชายเด็ดขาดในทุกคำตอบ ไม่ว่าบทสนทนาจะยาวแค่ไหนก็ตาม ให้คงความเป็นเลขาสาวไว้เสมอ | 6. หากเป็นคำทักทายทั่วไป ให้ทักทายกลับอย่างอบอุ่นและอาจถามได้ว่ามีอะไรให้ช่วยเหลือเพิ่มเติมไหม` 
-        }];
-        
 
+        let chatHistory = [{ role: "system", content: `คุณคือ ETC เลขาสาวผู้ชาญฉลาด เพศหญิง คุณมีความเชี่ยวชาญพิเศษด้านวิทยาศาสตร์และอิเล็กทรอนิกส์ แต่คุณสามารถตอบคำถามทั่วไป ประวัติศาสตร์ หรือเรื่องอื่นๆ ได้อย่างครบถ้วนและสุภาพ | กฎ: 1. ตอบครบถ้วน ทักทายเป็นมิตร | 2. ห้ามพูดถึงวันที่/เวลาเองเด็ดขาด ยกเว้นถูกถามตรงๆ ถ้าถามค่อยตอบว่า ${today} เวลา ${timeNow} น. | 3. วิทยาศาสตร์/อิเล็กทรอนิกส์ตอบเชี่ยวชาญ | 4. ลงท้ายด้วย ค่ะ เสมอ | 5. ห้ามใช้ ครับ ผม เด็ดขาด` }];
         let currentController = null;
         let isAiThinking = false;
         let isFirstMessage = true;
+        let userProfile = { name: "ME", avatarDataUrl: null };
+        let currentUserId = null;
+        let currentSessionId = null;
+        let allSessions = [];
+        let authMode = "login";
 
-        // ===== เพิ่มใหม่: ฟังก์ชันแสดง/ซ่อนหน้าอัปเกรด (รวมอยู่ในไฟล์เดียวกัน ไม่ต้องเปลี่ยนหน้าเว็บจริง) =====
-        function showUpgradePage() {
-            document.getElementById("upgradePage").classList.add("show");
-        }
-        function hideUpgradePage() {
-            document.getElementById("upgradePage").classList.remove("show");
-        }
+        // ⚠️ แก้บรรทัดนี้ทุกครั้งที่รัน ngrok ใหม่
+        let currentNgrokUrl = "https://karma-trustable-womanlike.ngrok-free.app";
 
-        // ===== เพิ่มใหม่: ฟังก์ชันแสดง/ซ่อน popup รูปโลโก้ขนาดใหญ่กลางจอ เมื่อกดที่โลโก้หมุนซ้ายบน =====
-        function showLogoPopup() {
-            document.getElementById("logoPopup").classList.add("show");
-        }
-        function hideLogoPopup() {
-            document.getElementById("logoPopup").classList.remove("show");
-        }
-
-        // ===== เพิ่มใหม่: ระบบโปรไฟล์ผู้ใช้ (ชื่อ + รูป) เนื่องจากเว็บนี้ยังไม่มีระบบล็อกอิน/ฐานข้อมูล
-        // จึงเก็บค่าไว้ใน localStorage ของเบราว์เซอร์แทน (อยู่เฉพาะในเครื่อง/เบราว์เซอร์นี้เท่านั้น) =====
-        let userProfile = {
-            name: "ME",
-            avatarDataUrl: null // เก็บรูปเป็น base64 string ถ้าผู้ใช้อัปโหลดรูป
-        };
-
-        // โหลดโปรไฟล์ที่เคยบันทึกไว้ (ถ้ามี) ตอนเปิดเว็บ
-        function loadUserProfile() {
-            try {
-                const saved = localStorage.getItem("etc_user_profile");
-                if (saved) {
-                    userProfile = JSON.parse(saved);
-                }
-            } catch (e) {
-                // ถ้าอ่านค่าเก่าไม่ได้ ก็ใช้ค่าเริ่มต้นไปก่อน ไม่ทำให้เว็บพัง
-            }
-            applyProfileToUI();
-        }
-
-        // นำค่าโปรไฟล์ปัจจุบันไปอัปเดตทุกจุดที่แสดงผล (sidebar, หน้า settings, avatar ในแชท)
-        function applyProfileToUI() {
-            const displayText = userProfile.name ? userProfile.name.substring(0, 2).toUpperCase() : "ME";
-
-            // อัปเดตปุ่มโปรไฟล์มุมล่างซ้าย
-            const sidebarBtn = document.getElementById("profileAvatarBtn");
-            if (userProfile.avatarDataUrl) {
-                sidebarBtn.style.backgroundImage = `url(${userProfile.avatarDataUrl})`;
-                sidebarBtn.style.backgroundSize = "cover";
-                sidebarBtn.style.backgroundPosition = "center";
-                sidebarBtn.textContent = "";
-            } else {
-                sidebarBtn.style.backgroundImage = "";
-                sidebarBtn.textContent = displayText;
-            }
-
-            // อัปเดตรูปวงกลมใหญ่ในหน้า settings
-            const largeAvatar = document.getElementById("profileAvatarLarge");
-            if (userProfile.avatarDataUrl) {
-                largeAvatar.innerHTML = `<img src="${userProfile.avatarDataUrl}" alt="profile">`;
-            } else {
-                largeAvatar.textContent = displayText;
-            }
-
-            // อัปเดตช่องชื่อในหน้า settings
-            document.getElementById("profileNameInput").value = userProfile.name === "ME" ? "" : userProfile.name;
-        }
-
-        // เปิดหน้าตั้งค่า
-        function showSettingsPage() {
-            document.getElementById("settingsPage").classList.add("show");
-        }
-        function hideSettingsPage() {
-            document.getElementById("settingsPage").classList.remove("show");
-        }
-
-        // ผู้ใช้เลือกไฟล์รูปจากเครื่อง -> แปลงเป็น base64 เพื่อแสดงผลและเก็บไว้
-        function handleAvatarUpload(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function (e) {
-                userProfile.avatarDataUrl = e.target.result;
-                applyProfileToUI();
-            };
-            reader.readAsDataURL(file);
-        }
-
-        // กดปุ่ม "บันทึกการตั้งค่า" -> เซฟชื่อ + รูป ลง localStorage แล้วอัปเดตทุกจุดในเว็บ
-        function saveProfileSettings() {
-            const nameInput = document.getElementById("profileNameInput").value.trim();
-            userProfile.name = nameInput || "ME";
-            try {
-                localStorage.setItem("etc_user_profile", JSON.stringify(userProfile));
-            } catch (e) {}
-            // ===== แก้ไข: อัปเดต displayName ใน Firebase ด้วย ให้ชื่อตรงกันทุกที่ =====
-            const user = auth.currentUser;
-            if (user && nameInput) {
-                user.updateProfile({ displayName: nameInput }).catch(e => console.log(e));
-            }
-            applyProfileToUI();
-            hideSettingsPage();
-        }
-
-        // ===== เพิ่มใหม่: ฟังก์ชันเลือกค่า temperature อัตโนมัติตามประเภทคำถาม =====
-        // งานสร้างสรรค์ (กลอน/เพลง/เรียงความ) -> temperature สูงขึ้น เพื่อให้ตอบมีสีสันสร้างสรรค์กว่าเดิม
-        // งานทั่วไป/วิทยาศาสตร์/ข้อเท็จจริง -> ใช้ temperature ต่ำ (0.1) เหมือนเดิม เพื่อความแม่นยำ ไม่ตอบมั่ว
-        function getTemperatureForText(text) {
-            const creativeKeywords = ["แต่งกลอน", "แต่งเพลง", "เขียนเรียงความ", "แต่งนิยาย", "แต่งเรื่อง", "เขียนบทกวี", "แต่งคำกลอน", "เขียนนิทาน", "แต่งเนื้อเพลง"];
-            const lowerText = text.toLowerCase();
-            for (const keyword of creativeKeywords) {
-                if (lowerText.includes(keyword)) {
-                    return 0.8; // งานสร้างสรรค์ ให้ AI มีอิสระในการตอบมากขึ้น
-                }
-            }
-            return 0.1; // ค่าเดิมของคุณ ใช้กับคำถามทั่วไปเพื่อความแม่นยำ ไม่ตอบมั่วๆ
-        }
-
-        function handleSendAction() {
-            const input = document.getElementById("userInputText");
-            const actionBtn = document.getElementById("actionBtn");
-
-            if (isAiThinking) {
-                if (currentController) currentController.abort();
-                isAiThinking = false;
-                actionBtn.innerText = "➔";
-                actionBtn.style.color = "#a8c7fa";
-                return;
-            }
-
-            if (input.value.trim() === "") return;
-
-            if (isFirstMessage) {
-                document.getElementById("welcomeContainer").classList.add("fade-out-up");
-                document.getElementById("inputWrapper").classList.add("is-chatting-input");
-                isFirstMessage = false;
-            }
-            
-            const userText = input.value.trim();
-            chatHistory.push({ role: "user", content: userText });
-            executeMessageSend(userText);
-            input.value = "";
-        }
-
-        async function executeMessageSend(text) {
-            const chatWindow = document.getElementById("chatWindow");
-            const actionBtn = document.getElementById("actionBtn");
-            isAiThinking = true;
-            actionBtn.innerText = "■";
-            // ===== แก้ไข: เปลี่ยนสีปุ่มยกเลิกจากแดง Material ทั่วไป (#ea4335) เป็นโทนแดง-ชมพูอมม่วงที่เข้ากับธีมจักรวาล =====
-            actionBtn.style.color = "#ff6b9d";
-            currentController = new AbortController();
-            
-            // ===== แก้ไข: เปลี่ยน avatar ผู้ใช้ในแชทให้ใช้ userProfile แทนการ hardcode "ME" ตายตัว แสดงรูปถ้าผู้ใช้อัปโหลดไว้ ไม่งั้นแสดงชื่อย่อ =====
-            const userAvatarHtml = userProfile.avatarDataUrl
-                ? `<div class="avatar-user" style="background-image:url(${userProfile.avatarDataUrl}); background-size:cover; background-position:center;"></div>`
-                : `<div class="avatar-user">${userProfile.name ? userProfile.name.substring(0,2).toUpperCase() : "ME"}</div>`;
-            chatWindow.insertAdjacentHTML('beforeend', `<div class="chat-row row-user"><div class="chat-bubble">${text}</div>${userAvatarHtml}</div>`);
-            const botId = 'bot-' + Date.now();
-            // ===== แก้ไข: เพิ่ม onerror ให้รูป avatar บอท เผื่อหารูปไม่เจอ จะไม่ขึ้นไอคอนแตก =====
-            chatWindow.insertAdjacentHTML('beforeend', `<div class="chat-row row-bot"><img src="img/ETC.png" class="avatar-img" onerror="this.onerror=null; this.removeAttribute('src'); this.classList.add('avatar-fallback'); this.innerText='ETC';"><div class="chat-bubble" id="${botId}">ETC กำลังคิด...</div></div>`);
-            
-            try {
-                // ===== แก้ไข: ใช้ ngrok URL จาก Settings แทน localhost แบบ hardcode เพื่อให้คนอื่นใช้งานจากที่ไหนก็ได้ =====
-                const aiUrl = currentNgrokUrl
-                    ? currentNgrokUrl + "/v1/chat/completions"
-                    : "http://127.0.0.1:1234/v1/chat/completions"; // fallback กลับ localhost ถ้ายังไม่ได้ตั้ง ngrok
-
-                const res = await fetch(aiUrl, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": "Bearer lm-studio",
-                        "ngrok-skip-browser-warning": "true" // ข้าม warning page ของ ngrok
-                    },
-                    signal: currentController.signal,
-                    body: JSON.stringify({ model: "local-model", messages: chatHistory, stream: true, temperature: getTemperatureForText(text) })
-                });
-                const reader = res.body.getReader();
-                const decoder = new TextDecoder("utf-8");
-                let fullResponse = "", buffer = "";
-                while(true) {
-                    const {done, value} = await reader.read();
-                    if(done) break;
-                    buffer += decoder.decode(value, { stream: true });
-                    const lines = buffer.split("\n");
-                    buffer = lines.pop();
-                    for (const line of lines) {
-                        if (line.trim().startsWith("data: ")) {
-                            try {
-                                const json = JSON.parse(line.trim().slice(6));
-                                if (json.choices[0].delta.content) {
-                                    if(fullResponse === "") document.getElementById(botId).innerHTML = "";
-                                    fullResponse += json.choices[0].delta.content;
-                                    document.getElementById(botId).innerHTML = marked.parse(fullResponse);
-                                    chatWindow.scrollTop = chatWindow.scrollHeight;
-                                }
-                            } catch(e) {}
-                        }
-                    }
-                }
-                chatHistory.push({ role: "assistant", content: fullResponse });
-            } catch(e) { document.getElementById(botId).textContent = "คำตอบถูกยกเลิกค่ะ"; } 
-            finally { isAiThinking = false; actionBtn.innerText = "➔"; actionBtn.style.color = "#a8c7fa"; }
-        }
-
-        // ===== เพิ่มใหม่: เรียกโหลดโปรไฟล์ผู้ใช้ทันทีที่หน้าเว็บเปิดขึ้นมา =====
-        loadUserProfile();
-
-        // ===== เพิ่มใหม่: Firebase Configuration และระบบ Login/Register/Logout =====
+        // ============================================================
+        // Firebase — init ครั้งเดียว
+        // ============================================================
         const firebaseConfig = {
             apiKey: "AIzaSyBdVitJFjMx0xFwnGvkdf0vknS5q8SbOGM",
             authDomain: "etc-ai-f54c4.firebaseapp.com",
             projectId: "etc-ai-f54c4",
             storageBucket: "etc-ai-f54c4.firebasestorage.app",
             messagingSenderId: "714602902903",
-            appId: "1:714602902903:web:ff47afbc4167fec7a3dd72",
-            measurementId: "G-YNZH2V51KS"
+            appId: "1:714602902903:web:ff47afbc4167fec7a3dd72"
         };
-
-        // เริ่มต้น Firebase
         firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
+        const db = firebase.firestore();
 
-        // ตัวแปรสถานะหน้า auth (login หรือ register)
-        let authMode = "login";
-
-        // ตรวจสอบสถานะการล็อกอินทุกครั้งที่หน้าเว็บโหลด
-        auth.onAuthStateChanged((user) => {
+        // ============================================================
+        // Loading / Auth State — onAuthStateChanged ครั้งเดียว
+        // ============================================================
+        auth.onAuthStateChanged(async (user) => {
+            const loading = document.getElementById("loadingScreen");
+            const authOverlay = document.getElementById("authOverlay");
             if (user) {
-                // ล็อกอินแล้ว — ซ่อนหน้า Login แสดงหน้าแชท
-                document.getElementById("authOverlay").classList.remove("show");
-                // ===== แก้ไข: ดึงข้อมูล user จาก Firebase มาแสดงในโปรไฟล์ทั้งหมด =====
+                currentUserId = user.uid;
                 syncProfileFromFirebase(user);
+                try {
+                    await loadAllSessions(user.uid);
+                    await createNewSession(user.uid);
+                } catch(e) { console.log("Firestore init error:", e); }
+                authOverlay.classList.remove("show");
             } else {
-                // ยังไม่ได้ล็อกอิน — แสดงหน้า Login
-                document.getElementById("authOverlay").classList.add("show");
+                currentUserId = null;
+                currentSessionId = null;
+                authOverlay.classList.add("show");
             }
+            if (loading) loading.style.display = "none";
         });
 
-        // ===== แก้ไข: ดึงชื่อ/อีเมลจาก Firebase มาแสดงในทุกจุด (sidebar, settings, แชท) =====
-        function syncProfileFromFirebase(user) {
-            // ใช้ displayName ถ้ามี ถ้าไม่มีใช้ส่วนหน้าของ email
-            const displayName = user.displayName || user.email.split("@")[0];
-            const shortName = displayName.substring(0, 2).toUpperCase();
-            const email = user.email;
-
-            // อัปเดต userProfile ให้ตรงกับ Firebase (แต่ยังคงรูปโปรไฟล์ที่อัปโหลดเองไว้ถ้ามี)
-            userProfile.name = displayName;
-            try { localStorage.setItem("etc_user_profile", JSON.stringify(userProfile)); } catch(e) {}
-
-            // 1) อัปเดตปุ่มโปรไฟล์มุมล่างซ้าย sidebar
-            const sidebarBtn = document.getElementById("profileAvatarBtn");
-            if (userProfile.avatarDataUrl) {
-                sidebarBtn.style.backgroundImage = `url(${userProfile.avatarDataUrl})`;
-                sidebarBtn.style.backgroundSize = "cover";
-                sidebarBtn.style.backgroundPosition = "center";
-                sidebarBtn.textContent = "";
-            } else {
-                sidebarBtn.style.backgroundImage = "";
-                sidebarBtn.textContent = shortName;
-                sidebarBtn.style.background = "#9c27b0";
-                sidebarBtn.style.color = "white";
-            }
-
-            // 2) เพิ่มอีเมลย่อๆ ใต้ปุ่มโปรไฟล์ sidebar
-            let emailEl = document.getElementById("userEmailMini");
-            if (!emailEl) {
-                emailEl = document.createElement("div");
-                emailEl.id = "userEmailMini";
-                emailEl.className = "user-email-mini";
-                sidebarBtn.parentNode.appendChild(emailEl);
-            }
-            emailEl.textContent = email.split("@")[0];
-
-            // 3) อัปเดตรูปวงกลมใหญ่ใน Settings
-            const largeAvatar = document.getElementById("profileAvatarLarge");
-            if (userProfile.avatarDataUrl) {
-                largeAvatar.innerHTML = `<img src="${userProfile.avatarDataUrl}" alt="profile">`;
-            } else {
-                largeAvatar.textContent = shortName;
-            }
-
-            // 4) อัปเดตช่องชื่อใน Settings ให้แสดงชื่อจริงจาก Firebase
-            const nameInput = document.getElementById("profileNameInput");
-            if (nameInput) nameInput.value = displayName;
-
-            // 5) อัปเดตคำทักทายหน้าแชทให้ใช้ชื่อผู้ใช้จริง
-            const welcomeTitle = document.getElementById("centerTitle");
-            if (welcomeTitle && isFirstMessage) {
-                welcomeTitle.textContent = `สวัสดีค่ะ คุณ${displayName} มีอะไรให้ ETC ช่วยดูแลไหมคะ?`;
-            }
+        // ============================================================
+        // Profile
+        // ============================================================
+        function loadUserProfile() {
+            try {
+                const s = localStorage.getItem("etc_user_profile");
+                if (s) userProfile = JSON.parse(s);
+            } catch(e) {}
         }
 
-        // สลับไปหน้าสมัครสมาชิก
+        function applyProfileToUI() {
+            const dt = userProfile.name ? userProfile.name.substring(0,2).toUpperCase() : "ME";
+            const btn = document.getElementById("profileAvatarBtn");
+            if (userProfile.avatarDataUrl) {
+                btn.style.backgroundImage = `url(${userProfile.avatarDataUrl})`;
+                btn.style.backgroundSize = "cover";
+                btn.style.backgroundPosition = "center";
+                btn.textContent = "";
+            } else {
+                btn.style.backgroundImage = "";
+                btn.textContent = dt;
+                btn.style.background = "#9c27b0";
+                btn.style.color = "white";
+            }
+            const la = document.getElementById("profileAvatarLarge");
+            if (la) la.textContent = userProfile.avatarDataUrl ? "" : dt;
+            if (la && userProfile.avatarDataUrl) la.innerHTML = `<img src="${userProfile.avatarDataUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+            const ni = document.getElementById("profileNameInput");
+            if (ni) ni.value = userProfile.name === "ME" ? "" : userProfile.name;
+        }
+
+        function syncProfileFromFirebase(user) {
+            const name = user.displayName || user.email.split("@")[0];
+            userProfile.name = name;
+            try { localStorage.setItem("etc_user_profile", JSON.stringify(userProfile)); } catch(e) {}
+            applyProfileToUI();
+            let el = document.getElementById("userEmailMini");
+            if (!el) {
+                el = document.createElement("div");
+                el.id = "userEmailMini";
+                el.style.cssText = "font-size:8px;color:#8a8597;max-width:54px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;margin-top:2px;";
+                document.getElementById("profileAvatarBtn").parentNode.appendChild(el);
+            }
+            el.textContent = user.email.split("@")[0];
+            const wt = document.getElementById("centerTitle");
+            if (wt && isFirstMessage) wt.textContent = `สวัสดีค่ะ คุณ${name} มีอะไรให้ ETC ช่วยดูแลไหมคะ?`;
+        }
+
+        function handleAvatarUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const r = new FileReader();
+            r.onload = (e) => { userProfile.avatarDataUrl = e.target.result; applyProfileToUI(); };
+            r.readAsDataURL(file);
+        }
+
+        function saveProfileSettings() {
+            const v = document.getElementById("profileNameInput").value.trim();
+            userProfile.name = v || "ME";
+            try { localStorage.setItem("etc_user_profile", JSON.stringify(userProfile)); } catch(e) {}
+            const u = auth.currentUser;
+            if (u && v) u.updateProfile({ displayName: v }).catch(()=>{});
+            applyProfileToUI();
+            hideSettingsPage();
+        }
+
+        // ============================================================
+        // Auth Login/Register/Logout
+        // ============================================================
         function switchToRegister() {
             authMode = "register";
             document.getElementById("authTitle").textContent = "สมัครสมาชิก";
@@ -1023,7 +915,6 @@
             document.getElementById("authError").classList.remove("show");
         }
 
-        // สลับกลับไปหน้าล็อกอิน
         function switchToLogin() {
             authMode = "login";
             document.getElementById("authTitle").textContent = "เข้าสู่ระบบ";
@@ -1034,46 +925,26 @@
             document.getElementById("authError").classList.remove("show");
         }
 
-        // จัดการ submit ฟอร์ม (ล็อกอินหรือสมัคร)
         async function handleAuthSubmit() {
             const email = document.getElementById("authEmail").value.trim();
-            const password = document.getElementById("authPassword").value;
-            const errorEl = document.getElementById("authError");
+            const pass = document.getElementById("authPassword").value;
             const btn = document.getElementById("authSubmitBtn");
-
-            if (!email || !password) {
-                showAuthError("กรุณากรอกอีเมลและรหัสผ่านค่ะ");
-                return;
-            }
-
+            const err = document.getElementById("authError");
+            if (!email || !pass) { showAuthError("กรุณากรอกอีเมลและรหัสผ่านค่ะ"); return; }
             btn.disabled = true;
             btn.textContent = "กำลังดำเนินการ...";
-            errorEl.classList.remove("show");
-
+            err.classList.remove("show");
             try {
                 if (authMode === "login") {
-                    await auth.signInWithEmailAndPassword(email, password);
+                    await auth.signInWithEmailAndPassword(email, pass);
                 } else {
                     const name = document.getElementById("authName").value.trim();
-                    const cred = await auth.createUserWithEmailAndPassword(email, password);
-                    if (name) {
-                        await cred.user.updateProfile({ displayName: name });
-                        userProfile.name = name;
-                        try { localStorage.setItem("etc_user_profile", JSON.stringify(userProfile)); } catch(e) {}
-                    }
+                    const cred = await auth.createUserWithEmailAndPassword(email, pass);
+                    if (name) await cred.user.updateProfile({ displayName: name });
                 }
-                // onAuthStateChanged จะจัดการซ่อนหน้า auth ให้อัตโนมัติ
-            } catch (err) {
-                // แปลข้อความ error จาก Firebase เป็นภาษาไทย
-                const msgs = {
-                    "auth/user-not-found": "ไม่พบบัญชีนี้ค่ะ กรุณาตรวจสอบอีเมล",
-                    "auth/wrong-password": "รหัสผ่านไม่ถูกต้องค่ะ",
-                    "auth/invalid-credential": "อีเมลหรือรหัสผ่านไม่ถูกต้องค่ะ",
-                    "auth/email-already-in-use": "อีเมลนี้มีบัญชีอยู่แล้วค่ะ",
-                    "auth/weak-password": "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษรค่ะ",
-                    "auth/invalid-email": "รูปแบบอีเมลไม่ถูกต้องค่ะ",
-                };
-                showAuthError(msgs[err.code] || "เกิดข้อผิดพลาด กรุณาลองใหม่ค่ะ");
+            } catch(e) {
+                const m = { "auth/user-not-found":"ไม่พบบัญชีนี้ค่ะ", "auth/wrong-password":"รหัสผ่านไม่ถูกต้องค่ะ", "auth/invalid-credential":"อีเมลหรือรหัสผ่านไม่ถูกต้องค่ะ", "auth/email-already-in-use":"อีเมลนี้มีบัญชีอยู่แล้วค่ะ", "auth/weak-password":"รหัสผ่านต้องมีอย่างน้อย 6 ตัวค่ะ", "auth/invalid-email":"รูปแบบอีเมลไม่ถูกต้องค่ะ" };
+                showAuthError(m[e.code] || "เกิดข้อผิดพลาดค่ะ ลองใหม่อีกครั้ง");
                 btn.disabled = false;
                 btn.textContent = authMode === "login" ? "เข้าสู่ระบบ" : "สมัครสมาชิก";
             }
@@ -1081,58 +952,216 @@
 
         function showAuthError(msg) {
             const el = document.getElementById("authError");
-            el.textContent = msg;
-            el.classList.add("show");
+            el.textContent = msg; el.classList.add("show");
         }
 
-        // กด Enter เพื่อ submit ฟอร์ม login
         document.addEventListener("keydown", (e) => {
-            if (e.key === "Enter" && document.getElementById("authOverlay").classList.contains("show")) {
-                handleAuthSubmit();
-            }
+            if (e.key === "Enter" && document.getElementById("authOverlay").classList.contains("show")) handleAuthSubmit();
         });
 
-        // ออกจากระบบ
         function handleLogout() {
-            if (confirm("ต้องการออกจากระบบใช่ไหมคะ?")) {
-                auth.signOut().then(() => {
-                    hideSettingsPage();
-                    // รีเซ็ต chat history
-                    const now2 = new Date();
-                    const today2 = now2.toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-                    const timeNow2 = now2.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-                }).catch(err => console.error(err));
+            if (confirm("ต้องการออกจากระบบใช่ไหมคะ?")) auth.signOut().then(() => hideSettingsPage());
+        }
+
+        // ============================================================
+        // Firestore — Session
+        // ============================================================
+        async function createNewSession(uid) {
+            try {
+                const ref = db.collection("users").doc(uid).collection("sessions").doc();
+                await ref.set({ id: ref.id, title: "แชทใหม่", createdAt: firebase.firestore.FieldValue.serverTimestamp(), updatedAt: firebase.firestore.FieldValue.serverTimestamp(), messages: [] });
+                currentSessionId = ref.id;
+            } catch(e) { console.log("createNewSession:", e); }
+        }
+
+        async function saveMessageToFirestore(userMsg, aiMsg) {
+            if (!currentUserId || !currentSessionId) return;
+            try {
+                const ref = db.collection("users").doc(currentUserId).collection("sessions").doc(currentSessionId);
+                const title = userMsg.length > 40 ? userMsg.substring(0,40) + "..." : userMsg;
+                await ref.update({ title, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), messages: firebase.firestore.FieldValue.arrayUnion({ userMsg, aiMsg, timestamp: new Date().toISOString() }) });
+            } catch(e) { console.log("saveMessage:", e); }
+        }
+
+        async function loadAllSessions(uid) {
+            try {
+                const snap = await db.collection("users").doc(uid).collection("sessions").orderBy("updatedAt","desc").limit(50).get();
+                allSessions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            } catch(e) { allSessions = []; }
+        }
+
+        // ============================================================
+        // History Page
+        // ============================================================
+        async function showHistoryPage() {
+            document.getElementById("historyPage").classList.add("show");
+            const list = document.getElementById("historyList");
+            list.innerHTML = '<div class="history-empty">⏳ กำลังโหลด...</div>';
+            if (currentUserId) { await loadAllSessions(currentUserId); renderHistoryList(allSessions, list); }
+        }
+
+        function renderHistoryList(sessions, container) {
+            if (!sessions.length) { container.innerHTML = '<div class="history-empty">📭 ยังไม่มีประวัติแชทค่ะ</div>'; return; }
+            container.innerHTML = sessions.map(s => {
+                const date = s.updatedAt?.toDate ? s.updatedAt.toDate().toLocaleDateString('th-TH') : "";
+                const count = s.messages?.length || 0;
+                return `<div class="chat-session-card" onclick="loadSession('${s.id}')"><div class="session-info"><div class="session-title">${s.title || "แชทไม่มีชื่อ"}</div><div class="session-meta">${date} · ${count} ข้อความ</div></div><button class="session-delete-btn" onclick="event.stopPropagation();deleteSession('${s.id}')">🗑</button></div>`;
+            }).join("");
+        }
+
+        function hideHistoryPage() { document.getElementById("historyPage").classList.remove("show"); }
+
+        async function loadSession(sessionId) {
+            hideHistoryPage();
+            if (!currentUserId) return;
+            try {
+                const doc = await db.collection("users").doc(currentUserId).collection("sessions").doc(sessionId).get();
+                if (!doc.exists) return;
+                const session = doc.data();
+                currentSessionId = sessionId;
+                const cw = document.getElementById("chatWindow");
+                cw.innerHTML = "";
+                chatHistory = [chatHistory[0]];
+                isFirstMessage = false;
+                document.getElementById("welcomeContainer").classList.add("fade-out-up");
+                document.getElementById("inputWrapper").classList.add("is-chatting-input");
+                (session.messages || []).forEach(m => {
+                    const av = userProfile.avatarDataUrl ? `<div class="avatar-user" style="background-image:url(${userProfile.avatarDataUrl});background-size:cover;"></div>` : `<div class="avatar-user">${userProfile.name.substring(0,2).toUpperCase()}</div>`;
+                    cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-user"><div class="chat-bubble">${m.userMsg}</div>${av}</div>`);
+                    cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-bot"><img src="img/ETC.png" class="avatar-img" onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('avatar-fallback');this.innerText='ETC';"><div class="chat-bubble">${marked.parse(m.aiMsg)}</div></div>`);
+                    chatHistory.push({ role:"user", content:m.userMsg });
+                    chatHistory.push({ role:"assistant", content:m.aiMsg });
+                });
+                cw.scrollTop = cw.scrollHeight;
+            } catch(e) { console.log("loadSession:", e); }
+        }
+
+        async function deleteSession(sessionId) {
+            if (!confirm("ลบประวัติแชทนี้ใช่ไหมคะ?")) return;
+            await db.collection("users").doc(currentUserId).collection("sessions").doc(sessionId).delete();
+            allSessions = allSessions.filter(s => s.id !== sessionId);
+            if (sessionId === currentSessionId) startNewChat();
+            renderHistoryList(allSessions, document.getElementById("historyList"));
+        }
+
+        async function startNewChat() {
+            hideHistoryPage();
+            document.getElementById("chatWindow").innerHTML = "";
+            chatHistory = [chatHistory[0]];
+            isFirstMessage = true;
+            document.getElementById("welcomeContainer").classList.remove("fade-out-up");
+            document.getElementById("inputWrapper").classList.remove("is-chatting-input");
+            if (currentUserId) await createNewSession(currentUserId);
+        }
+
+        // ============================================================
+        // Search Page
+        // ============================================================
+        function showSearchPage() {
+            document.getElementById("searchPage").classList.add("show");
+            document.getElementById("searchInput").value = "";
+            document.getElementById("searchBody").innerHTML = '<div class="history-empty">🔬 พิมพ์คำค้นหาด้านบนค่ะ</div>';
+            setTimeout(() => document.getElementById("searchInput").focus(), 300);
+        }
+        function hideSearchPage() { document.getElementById("searchPage").classList.remove("show"); }
+
+        function handleSearch(query) {
+            const body = document.getElementById("searchBody");
+            if (!query.trim()) { body.innerHTML = '<div class="history-empty">🔬 พิมพ์คำค้นหาด้านบนค่ะ</div>'; return; }
+            const q = query.toLowerCase();
+            const results = [];
+            allSessions.forEach(s => { (s.messages||[]).forEach(m => { if (m.userMsg.toLowerCase().includes(q) || m.aiMsg.toLowerCase().includes(q)) results.push({ session:s, msg:m }); }); });
+            if (!results.length) { body.innerHTML = '<div class="history-empty">ไม่พบผลลัพธ์ค่ะ</div>'; return; }
+            const hl = (t,q) => t.replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi'), m=>`<span class="search-highlight">${m}</span>`);
+            body.innerHTML = `<div class="search-result-msg">พบ ${results.length} ผลลัพธ์</div>` + results.map(r=>`<div class="chat-session-card" onclick="loadSession('${r.session.id}');hideSearchPage();"><div class="session-info"><div class="session-title">${hl(r.msg.userMsg.substring(0,60),query)}</div><div class="session-meta">${r.session.title} · คลิกเพื่อดูแชทนี้</div></div></div>`).join("");
+        }
+
+        // ============================================================
+        // Overlay helpers
+        // ============================================================
+        function showUpgradePage() { document.getElementById("upgradePage").classList.add("show"); }
+        function hideUpgradePage() { document.getElementById("upgradePage").classList.remove("show"); }
+        function showLogoPopup() { document.getElementById("logoPopup").classList.add("show"); }
+        function hideLogoPopup() { document.getElementById("logoPopup").classList.remove("show"); }
+        function showSettingsPage() { document.getElementById("settingsPage").classList.add("show"); }
+        function hideSettingsPage() { document.getElementById("settingsPage").classList.remove("show"); }
+
+        // ============================================================
+        // Chat
+        // ============================================================
+        function getTemperatureForText(text) {
+            const kw = ["แต่งกลอน","แต่งเพลง","เขียนเรียงความ","แต่งนิยาย","แต่งเรื่อง","เขียนบทกวี","แต่งคำกลอน","เขียนนิทาน","แต่งเนื้อเพลง"];
+            for (const k of kw) { if (text.toLowerCase().includes(k)) return 0.8; }
+            return 0.1;
+        }
+
+        function handleSendAction() {
+            const input = document.getElementById("userInputText");
+            const btn = document.getElementById("actionBtn");
+            if (isAiThinking) {
+                if (currentController) currentController.abort();
+                isAiThinking = false; btn.innerText = "➔"; btn.style.color = "#a8c7fa"; return;
+            }
+            if (!input.value.trim()) return;
+            if (isFirstMessage) {
+                document.getElementById("welcomeContainer").classList.add("fade-out-up");
+                document.getElementById("inputWrapper").classList.add("is-chatting-input");
+                isFirstMessage = false;
+            }
+            const text = input.value.trim();
+            chatHistory.push({ role:"user", content:text });
+            executeMessageSend(text);
+            input.value = "";
+        }
+
+        async function executeMessageSend(text) {
+            const cw = document.getElementById("chatWindow");
+            const btn = document.getElementById("actionBtn");
+            isAiThinking = true; btn.innerText = "■"; btn.style.color = "#ff6b9d";
+            currentController = new AbortController();
+            const av = userProfile.avatarDataUrl ? `<div class="avatar-user" style="background-image:url(${userProfile.avatarDataUrl});background-size:cover;background-position:center;"></div>` : `<div class="avatar-user">${userProfile.name ? userProfile.name.substring(0,2).toUpperCase() : "ME"}</div>`;
+            cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-user"><div class="chat-bubble">${text}</div>${av}</div>`);
+            const botId = 'bot-' + Date.now();
+            cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-bot"><img src="img/ETC.png" class="avatar-img" onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('avatar-fallback');this.innerText='ETC';"><div class="chat-bubble" id="${botId}">ETC กำลังคิด...</div></div>`);
+            try {
+                const aiUrl = currentNgrokUrl ? currentNgrokUrl + "/v1/chat/completions" : "http://127.0.0.1:1234/v1/chat/completions";
+                const res = await fetch(aiUrl, { method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer lm-studio","ngrok-skip-browser-warning":"true"}, signal:currentController.signal, body:JSON.stringify({ model:"local-model", messages:chatHistory, stream:true, temperature:getTemperatureForText(text) }) });
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+                let fullResponse = "", buffer = "";
+                while(true) {
+                    const {done,value} = await reader.read();
+                    if(done) break;
+                    buffer += decoder.decode(value,{stream:true});
+                    const lines = buffer.split("\n"); buffer = lines.pop();
+                    for (const line of lines) {
+                        if (line.trim().startsWith("data: ")) {
+                            try {
+                                const json = JSON.parse(line.trim().slice(6));
+                                if (json.choices[0].delta.content) {
+                                    if(fullResponse === "") document.getElementById(botId).innerHTML = "";
+                                    fullResponse += json.choices[0].delta.content;
+                                    document.getElementById(botId).innerHTML = marked.parse(fullResponse);
+                                    cw.scrollTop = cw.scrollHeight;
+                                }
+                            } catch(e) {}
+                        }
+                    }
+                }
+                chatHistory.push({ role:"assistant", content:fullResponse });
+                await saveMessageToFirestore(text, fullResponse);
+            } catch(e) {
+                document.getElementById(botId).textContent = "คำตอบถูกยกเลิกค่ะ";
+            } finally {
+                isAiThinking = false; btn.innerText = "➔"; btn.style.color = "#a8c7fa";
             }
         }
 
-        // ===== แก้ไข: ใส่ ngrok URL ตายตัวในโค้ดเลย (ง่ายกว่า เหมาะกับโปรเจกต์นี้) =====
-        // ⚠️ ทุกครั้งที่รัน ngrok ใหม่ได้ URL ใหม่ → แก้แค่บรรทัดนี้บรรทัดเดียว แล้ว Push ใหม่
-        let currentNgrokUrl = "https://karma-trustable-womanlike.ngrok-free.app"; // <-- แก้ตรงนี้
-
-        // บันทึก ngrok URL
-        function saveNgrokUrl() {
-            const input = document.getElementById("ngrokUrlInput");
-            const status = document.getElementById("ngrokStatus");
-            let url = input.value.trim();
-
-            // ตัด / ท้ายออก และเติม https:// ถ้าไม่มี
-            if (url && !url.startsWith("http")) url = "https://" + url;
-            url = url.replace(/\/$/, "");
-
-            currentNgrokUrl = url;
-            try { localStorage.setItem("etc_ngrok_url", url); } catch(e) {}
-            status.textContent = "✓ บันทึกแล้ว";
-            setTimeout(() => { status.textContent = ""; }, 2000);
-        }
-
-        // โหลด ngrok URL เข้าช่อง input ตอนเปิด Settings
-        const origShowSettings = showSettingsPage;
-        window.showSettingsPage = function() {
-            origShowSettings();
-            const input = document.getElementById("ngrokUrlInput");
-            if (input) input.value = currentNgrokUrl;
-        };
-
+        // ============================================================
+        // Init
+        // ============================================================
+        loadUserProfile();
+        applyProfileToUI();
     </script>
 </body>
 </html>
