@@ -533,46 +533,6 @@
             text-align: center;
         }
 
-        /* ===== เพิ่มใหม่: CSS ช่องกรอก ngrok URL ใน Settings ===== */
-        .ngrok-url-section {
-            margin-top: 4px;
-        }
-        .ngrok-label {
-            font-size: 12px;
-            color: #8a8597;
-            margin-bottom: 6px;
-            display: block;
-        }
-        .ngrok-url-input {
-            width: 100%;
-            background: rgba(255,255,255,0.06);
-            border: 1px solid rgba(168, 199, 250, 0.15);
-            border-radius: 10px;
-            padding: 9px 12px;
-            color: #f0eaff;
-            font-size: 12.5px;
-            outline: none;
-            box-sizing: border-box;
-            margin-bottom: 8px;
-        }
-        .ngrok-url-input:focus { border-color: #a8c7fa; }
-        .ngrok-save-btn {
-            background: rgba(168, 199, 250, 0.15);
-            border: 1px solid rgba(168, 199, 250, 0.3);
-            border-radius: 8px;
-            color: #a8c7fa;
-            padding: 7px 14px;
-            font-size: 13px;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-        .ngrok-save-btn:hover { background: rgba(168, 199, 250, 0.25); }
-        .ngrok-status {
-            font-size: 11px;
-            margin-left: 8px;
-            color: #2ecc71;
-        }
-
         /* ===== เพิ่มใหม่: CSS หน้าประวัติแชทและค้นหา ===== */
         .history-overlay, .search-overlay {
             display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
@@ -796,8 +756,9 @@
         let allSessions = [];
         let authMode = "login";
 
-        // ⚠️ แก้บรรทัดนี้ทุกครั้งที่รัน ngrok ใหม่
-        let currentNgrokUrl = "https://karma-trustable-womanlike.ngrok-free.dev";
+        // ===== แก้ไข: ลบตัวแปร currentNgrokUrl ออก เพราะเลิกใช้ LM Studio + ngrok แล้ว =====
+        // ===== เปลี่ยนไปเรียก /api/chat ของเราเอง ซึ่งจะไปเชื่อมกับ Groq (โมเดล qwen/qwen3.6-27b) แทน =====
+        // ===== ข้อดี: ไม่ต้องเปิดคอมทิ้งไว้ตลอด แชทได้ตลอด 24 ชม. ฟรี =====
 
         // ============================================================
         // Firebase — init ครั้งเดียว
@@ -1124,8 +1085,22 @@
             const botId = 'bot-' + Date.now();
             cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-bot"><img src="img/ETC.png" class="avatar-img" onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('avatar-fallback');this.innerText='ETC';"><div class="chat-bubble" id="${botId}">ETC กำลังคิด...</div></div>`);
             try {
-                const aiUrl = currentNgrokUrl ? currentNgrokUrl + "/v1/chat/completions" : "http://127.0.0.1:1234";
-                const res = await fetch(aiUrl, { method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer lm-studio","ngrok-skip-browser-warning":"true"}, signal:currentController.signal, body:JSON.stringify({ model:"local-model", messages:chatHistory, stream:true, temperature:getTemperatureForText(text) }) });
+                // ===== แก้ไข: เปลี่ยนจากยิงตรงไป ngrok/LM Studio เป็นยิงไปที่ /api/chat ของเราเอง =====
+                // ===== /api/chat จะเป็นคนแนบ Groq API key (ที่ซ่อนไว้บนเซิร์ฟเวอร์) แล้วส่งต่อให้ Groq อีกที =====
+                // ===== ไม่ต้องส่ง model หรือ Authorization จากฝั่งนี้แล้ว เพราะกำหนดไว้ในไฟล์ api/chat.js แทน =====
+                const res = await fetch("/api/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    signal: currentController.signal,
+                    body: JSON.stringify({ messages: chatHistory, temperature: getTemperatureForText(text) })
+                });
+
+                // ===== เพิ่มใหม่: เช็ค error ก่อนอ่าน stream เผื่อ Groq ตอบ error (เช่น key ผิด, โมเดลถูกยุบ) =====
+                if (!res.ok) {
+                    const errData = await res.text();
+                    throw new Error(`เชื่อมต่อ AI ไม่สำเร็จ (${res.status}): ${errData}`);
+                }
+
                 const reader = res.body.getReader();
                 const decoder = new TextDecoder("utf-8");
                 let fullResponse = "", buffer = "";
@@ -1136,8 +1111,10 @@
                     const lines = buffer.split("\n"); buffer = lines.pop();
                     for (const line of lines) {
                         if (line.trim().startsWith("data: ")) {
+                            const payload = line.trim().slice(6);
+                            if (payload === "[DONE]") continue; // ===== เพิ่มใหม่: ข้ามสัญญาณจบ stream ของ Groq =====
                             try {
-                                const json = JSON.parse(line.trim().slice(6));
+                                const json = JSON.parse(payload);
                                 if (json.choices[0].delta.content) {
                                     if(fullResponse === "") document.getElementById(botId).innerHTML = "";
                                     fullResponse += json.choices[0].delta.content;
@@ -1151,7 +1128,8 @@
                 chatHistory.push({ role:"assistant", content:fullResponse });
                 await saveMessageToFirestore(text, fullResponse);
             } catch(e) {
-                document.getElementById(botId).textContent = "คำตอบถูกยกเลิกค่ะ";
+                // ===== แก้ไข: โชว์ error message จริงๆ ในกล่องแชท ช่วยตอน debug (เดิมจะขึ้นแค่ "คำตอบถูกยกเลิกค่ะ" ทุกกรณี) =====
+                document.getElementById(botId).textContent = e.name === "AbortError" ? "คำตอบถูกยกเลิกค่ะ" : `ขออภัยค่ะ เกิดข้อผิดพลาด: ${e.message}`;
             } finally {
                 isAiThinking = false; btn.innerText = "➔"; btn.style.color = "#a8c7fa";
             }
