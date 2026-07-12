@@ -53,6 +53,10 @@ export default async function handler(req) {
         messages: messages,
         temperature: temperature ?? 0.7,
         stream: true, // เปิด streaming เพื่อให้ข้อความค่อยๆ พิมพ์ออกมา
+        // ===== เพิ่มใหม่: qwen3.6-27b เป็นโมเดลที่ "คิดก่อนตอบ" (reasoning model) =====
+        // ถ้าไม่ตั้งค่านี้ ขั้นตอนความคิดทั้งหมด (thinking process) จะปนมาในคำตอบด้วย
+        // ตั้งเป็น "hidden" เพื่อให้ Groq ซ่อนส่วนคิด ส่งกลับมาแค่คำตอบสุดท้ายที่สมบูรณ์
+        reasoning_format: "hidden",
       }),
     });
 
