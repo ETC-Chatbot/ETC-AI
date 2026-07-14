@@ -28,8 +28,14 @@
             .sidebar-hover-zone { display: none; } /* บนมือถือไม่มี hover จริง เลยไม่ต้องมีแถบดักนี้ */
         }
         /* ===== เพิ่มใหม่: ปุ่ม toggle sidebar แบบ hamburger กดได้ทั้งมือถือและคอม ===== */
-        .sidebar-toggle-btn { position: fixed; top: 16px; left: 16px; width: 40px; height: 40px; border-radius: 50%; background: rgba(38, 26, 64, 0.85); backdrop-filter: blur(10px); border: 1px solid rgba(168, 199, 250, 0.2); color: #a8c7fa; font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 60; transition: background 0.2s ease; }
+        .sidebar-toggle-btn { position: fixed; top: 16px; left: 16px; width: 40px; height: 40px; border-radius: 50%; background: rgba(38, 26, 64, 0.85); backdrop-filter: blur(10px); border: 1px solid rgba(168, 199, 250, 0.2); color: #a8c7fa; font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 60; transition: background 0.2s ease, left 0.25s ease; }
         .sidebar-toggle-btn:hover { background: rgba(60, 40, 100, 0.9); }
+        /* ===== เพิ่มใหม่: พอ sidebar เปิดออกมา (แตะปุ่มบนมือถือ หรือ hover บนคอม) ให้ปุ่ม toggle เลื่อนไปทางขวาพ้นแนว sidebar (68px + ระยะห่าง)
+           กันไม่ให้ปุ่มไปซ้อนทับกับโลโก้หมุนที่อยู่ในแถบเมนู (เดิมทั้งสองอยู่ตำแหน่งใกล้กันมากจนซ้อนทับ) ===== */
+        .sidebar-wrapper:has(.icon-sidebar.open) .sidebar-toggle-btn,
+        .sidebar-wrapper:has(.icon-sidebar:hover) .sidebar-toggle-btn {
+            left: 84px;
+        }
         .top-icons { display: flex; flex-direction: column; align-items: center; gap: 24px; }
         
         .main-container { flex: 1; display: flex; flex-direction: column; position: relative; background: url('img/EGG.jpg') no-repeat center center; background-size: cover; z-index: 1; overflow: hidden; width: 100%; }
@@ -603,7 +609,7 @@
     </style>
 </head>
 <body>
-    <!-- ===== เพิ่มใหม่: ปุ่ม toggle sidebar (มือถือ = แตะเปิด/ปิด, คอม = ใช้เป็น fallback เผื่อไม่อยาก hover) ===== -->
+    <div class="sidebar-wrapper">
     <button class="sidebar-toggle-btn" id="sidebarToggleBtn" onclick="toggleSidebar()" title="เมนู">☰</button>
     <!-- ===== เพิ่มใหม่: แถบโปร่งใสชิดขอบซ้ายจอ ดักเมาส์ชี้บนคอมเพื่อเด้ง sidebar ออกมาอัตโนมัติ (ไม่มีผลบนมือถือ) ===== -->
     <div class="sidebar-hover-zone"></div>
@@ -626,6 +632,7 @@
             <div class="menu-icon electronic-icon" onclick="showSettingsPage()" title="ตั้งค่า">⚙</div>
             <div class="menu-icon" id="profileAvatarBtn" onclick="showSettingsPage()" style="background:#ffb4a2; color:#333; cursor:pointer;">ME</div>
         </div>
+    </div>
     </div>
 
     <div class="main-container">
@@ -774,6 +781,18 @@
             <input type="text" class="auth-input" id="authEmail" placeholder="อีเมล เช่น example@gmail.com" autocomplete="off" inputmode="email">
             <input type="password" class="auth-input" id="authPassword" placeholder="รหัสผ่าน (อย่างน้อย 6 ตัว)" autocomplete="off">
             <button class="auth-btn" id="authSubmitBtn" onclick="handleAuthSubmit()">เข้าสู่ระบบ</button>
+
+            <!-- ===== เพิ่มใหม่: ปุ่มเข้าสู่ระบบด้วย Google เพื่อให้ได้รูปโปรไฟล์มาอัตโนมัติจากบัญชี Google (ระบบเดิมใช้อีเมล+รหัสผ่านล้วน ไม่มีรูปมาให้) ===== -->
+            <div style="display:flex; align-items:center; gap:10px; margin:16px 0;">
+                <div style="flex:1; height:1px; background:rgba(255,255,255,0.1);"></div>
+                <span style="color:#5a5570; font-size:12px;">หรือ</span>
+                <div style="flex:1; height:1px; background:rgba(255,255,255,0.1);"></div>
+            </div>
+            <button class="auth-btn" id="googleSignInBtn" onclick="handleGoogleSignIn()" style="background:#fff; color:#3c4043; display:flex; align-items:center; justify-content:center; gap:10px;">
+                <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.87 2.7-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.98v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.66 9c0-.59.1-1.17.29-1.7V4.97H.98A9 9 0 0 0 0 9c0 1.45.35 2.83.98 4.03l2.97-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .98 4.97L3.95 7.3C4.66 5.17 6.65 3.58 9 3.58z"/></svg>
+                เข้าสู่ระบบด้วย Google
+            </button>
+
             <div class="auth-switch" id="authSwitch">
                 ยังไม่มีบัญชี? <span onclick="switchToRegister()">สมัครสมาชิก</span>
             </div>
@@ -790,7 +809,7 @@
 
         // ===== แก้ไข: เอาวันที่/เวลาที่ฝังตายตัว (${today}/${timeNow}) ออกจาก system prompt
         // และเพิ่มกฎข้อ 6 ห้ามทักทายซ้ำทุกข้อความ (เดิมกฎข้อ 1 เขียนกว้างเกินไป โมเดลเลยทักทายทุกครั้งที่ตอบ) =====
-        let chatHistory = [{ role: "system", content: `คุณคือ ETC เลขาสาวผู้ชาญฉลาด เพศหญิง คุณมีความเชี่ยวชาญพิเศษด้านวิทยาศาสตร์และอิเล็กทรอนิกส์ แต่คุณสามารถตอบคำถามทั่วไป ประวัติศาสตร์ หรือเรื่องอื่นๆ ได้อย่างครบถ้วนและสุภาพ | กฎ: 1. ตอบครบถ้วน | 2. ห้ามพูดถึงวันที่/เวลาเองเด็ดขาด ยกเว้นถูกถามตรงๆ ให้ใช้ข้อมูลวันที่/เวลาปัจจุบันที่ระบบแจ้งให้ในข้อความ system ล่าสุดเท่านั้น ห้ามเดาหรือจำวันที่เก่าจากตอนต้นบทสนทนา | 3. วิทยาศาสตร์/อิเล็กทรอนิกส์ตอบเชี่ยวชาญ | 4. ลงท้ายด้วย ค่ะ เสมอ | 5. ห้ามใช้ ครับ ผม เด็ดขาด | 6. ทักทาย (เช่น สวัสดีค่ะ) ได้เฉพาะข้อความแรกสุดของบทสนทนาเท่านั้น ข้อความถัดๆไปห้ามทักทายซ้ำอีก ให้ตอบเข้าประเด็นคำถามได้เลย` }];
+        let chatHistory = [{ role: "system", content: `คุณคือ ETC เลขาสาวผู้ชาญฉลาด เพศหญิง คุณมีความเชี่ยวชาญพิเศษด้านวิทยาศาสตร์และอิเล็กทรอนิกส์ แต่คุณสามารถตอบคำถามทั่วไป ประวัติศาสตร์ หรือเรื่องอื่นๆ ได้อย่างครบถ้วนและสุภาพ | กฎ: 1. ตอบให้ครบถ้วนละเอียด ไม่สั้นห้วนจนเกินไป ถ้าเหมาะสมให้ยกตัวอย่างประกอบหรือแนะนำเรื่องที่เกี่ยวข้องเพิ่มเติมท้ายคำตอบด้วย | 2. ห้ามพูดถึงวันที่/เวลาเองเด็ดขาด ยกเว้นถูกถามตรงๆ ให้ใช้ข้อมูลวันที่/เวลาปัจจุบันที่ระบบแจ้งให้ในข้อความ system ล่าสุดเท่านั้น ห้ามเดาหรือจำวันที่เก่าจากตอนต้นบทสนทนา | 3. วิทยาศาสตร์/อิเล็กทรอนิกส์ตอบเชี่ยวชาญ | 4. ลงท้ายด้วย ค่ะ เสมอ | 5. ห้ามใช้ ครับ ผม เด็ดขาด | 6. ทักทาย (เช่น สวัสดีค่ะ) ได้เฉพาะข้อความแรกสุดของบทสนทนาเท่านั้น ข้อความถัดๆไปห้ามทักทายซ้ำอีก ให้ตอบเข้าประเด็นคำถามได้เลย | 7. ห้ามพูดคำหรือวลีเดิมซ้ำๆวนไปมาเด็ดขาด ถ้าตอบยาวให้เรียบเรียงเนื้อหาใหม่ทุกประโยค ห้ามคัดลอกรูปแบบประโยคเดิมซ้ำ` }];
 
         // ===== เพิ่มใหม่: ฟังก์ชันคำนวณวันที่/เวลาปัจจุบัน "สดใหม่" ทุกครั้งที่เรียก (ไม่ใช่ค่าคงที่ตอนโหลดหน้า) =====
         function getCurrentDateTimeSystemMessage() {
@@ -980,6 +999,22 @@
             el.textContent = msg; el.classList.add("show");
         }
 
+        // ===== เพิ่มใหม่: เข้าสู่ระบบด้วย Google — ข้อดีคือ Firebase จะได้รูปโปรไฟล์ (photoURL) และชื่อจริงมาให้อัตโนมัติจากบัญชี Google
+        // ต่างจาก login แบบอีเมล+รหัสผ่านที่ไม่มีรูปมาให้เลย ต้องอัปโหลดเองเท่านั้น =====
+        function handleGoogleSignIn() {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            const btn = document.getElementById("googleSignInBtn");
+            btn.disabled = true;
+            auth.signInWithPopup(provider)
+                .catch((e) => {
+                    // popup-closed-by-user เกิดตอนผู้ใช้ปิด popup เอง ไม่ต้องโชว์ error ก็ได้
+                    if (e.code !== "auth/popup-closed-by-user") {
+                        showAuthError("เข้าสู่ระบบด้วย Google ไม่สำเร็จค่ะ ลองใหม่อีกครั้ง");
+                    }
+                })
+                .finally(() => { btn.disabled = false; });
+        }
+
         document.addEventListener("keydown", (e) => {
             if (e.key === "Enter" && document.getElementById("authOverlay").classList.contains("show")) handleAuthSubmit();
         });
@@ -1113,10 +1148,14 @@
 
         // ===== เพิ่มใหม่: เปิด/ปิด sidebar ซ้ายบนมือถือ (กดปุ่ม ☰) =====
         function toggleSidebar() {
-            document.getElementById("iconSidebar").classList.toggle("open");
+            const sidebar = document.getElementById("iconSidebar");
+            const btn = document.getElementById("sidebarToggleBtn");
+            const isOpen = sidebar.classList.toggle("open");
+            btn.textContent = isOpen ? "✕" : "☰"; // ===== เพิ่มใหม่: เปลี่ยนไอคอนปุ่มเป็นกากบาทตอนเปิด ให้รู้ว่ากดซ้ำแล้วจะปิด =====
         }
         function closeSidebar() {
             document.getElementById("iconSidebar").classList.remove("open");
+            document.getElementById("sidebarToggleBtn").textContent = "☰";
         }
         // ===== เพิ่มใหม่: พอกดเลือกเมนูใดๆใน sidebar แล้ว ให้ปิด sidebar ทันที (เฉพาะจอที่ใช้การกด ไม่ใช่ hover) กันไม่ให้บังหน้าจอค้างไว้ =====
         document.getElementById("iconSidebar").addEventListener("click", (e) => {
@@ -1128,8 +1167,10 @@
         // ============================================================
         function getTemperatureForText(text) {
             const kw = ["แต่งกลอน","แต่งเพลง","เขียนเรียงความ","แต่งนิยาย","แต่งเรื่อง","เขียนบทกวี","แต่งคำกลอน","เขียนนิทาน","แต่งเนื้อเพลง"];
-            for (const k of kw) { if (text.toLowerCase().includes(k)) return 0.8; }
-            return 0.1;
+            for (const k of kw) { if (text.toLowerCase().includes(k)) return 0.9; }
+            // ===== แก้ไข: เปลี่ยนจาก 0.1 (ต่ำเกินไป) เป็น 0.7 ตามค่าที่ Qwen แนะนำสำหรับโหมดสนทนาทั่วไป (non-thinking mode)
+            // temperature ต่ำเกินไปมีส่วนทำให้โมเดลติดวนซ้ำคำเดิม (เจอปัญหา "ท่องชื่อซ้ำไม่จบ") ร่วมกับการไม่ได้ตั้ง presence_penalty ไว้ =====
+            return 0.7;
         }
 
         function handleSendAction() {
