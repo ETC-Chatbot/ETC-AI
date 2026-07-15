@@ -19,8 +19,14 @@
         .icon-sidebar { position: fixed; top: 0; left: 0; width: 68px; background-color: #0e0e0e; height: 100%; height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 20px 0; box-sizing: border-box; flex-shrink: 0; z-index: 50; border-right: 1px solid #222; transform: translateX(-100%); transition: transform 0.25s ease; }
         /* ===== เพิ่มใหม่: class .open ใช้กับ JS toggle บนมือถือ / :hover ใช้บนคอม ===== */
         .icon-sidebar.open { transform: translateX(0); }
+        /* ===== แก้ไข (บั๊ก): เดิมมี .icon-sidebar:hover อยู่ แต่ตัว sidebar ถูกซ่อนออกนอกจอ (translateX(-100%)) อยู่แล้ว
+           เมาส์เลยไม่มีทางไปชี้โดนตัว sidebar ได้ตั้งแต่แรก (มันไม่อยู่บนจอ) กฎนี้เลยไม่เคยทำงานจริง
+           ต้องใช้ .sidebar-hover-zone (แถบโปร่งใสชิดขอบจอ) เป็นตัวดักแทน แล้วใช้ :has() ให้แถบนั้นสั่งเปิด sidebar อีกที ===== */
         @media (hover: hover) and (pointer: fine) {
-            .icon-sidebar:hover { transform: translateX(0); }
+            .sidebar-wrapper:has(.sidebar-hover-zone:hover) .icon-sidebar,
+            .sidebar-wrapper:has(.icon-sidebar:hover) .icon-sidebar {
+                transform: translateX(0);
+            }
         }
         /* ===== เพิ่มใหม่: แถบแคบๆชิดขอบซ้ายจอ ใช้ดักเมาส์ชี้บนคอมเพื่อเด้ง sidebar ออกมา (โปร่งใส มองไม่เห็น) ===== */
         .sidebar-hover-zone { position: fixed; top: 0; left: 0; width: 14px; height: 100%; height: 100dvh; z-index: 45; }
@@ -28,11 +34,12 @@
             .sidebar-hover-zone { display: none; } /* บนมือถือไม่มี hover จริง เลยไม่ต้องมีแถบดักนี้ */
         }
         /* ===== เพิ่มใหม่: ปุ่ม toggle sidebar แบบ hamburger กดได้ทั้งมือถือและคอม ===== */
-        .sidebar-toggle-btn { position: fixed; top: 16px; left: 16px; width: 40px; height: 40px; border-radius: 50%; background: rgba(38, 26, 64, 0.85); backdrop-filter: blur(10px); border: 1px solid rgba(168, 199, 250, 0.2); color: #a8c7fa; font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 60; transition: background 0.2s ease, left 0.25s ease; }
+        .sidebar-toggle-btn { position: fixed; top: 16px; left: 16px; width: 40px; height: 40px; border-radius: 50%; background: rgba(38, 26, 64, 0.85); backdrop-filter: blur(10px); border: 1px solid rgba(168, 199, 250, 0.2); color: #a8c7fa; font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 60; transition: background 0.2s ease, left 0.25s ease, opacity 0.2s ease; }
         .sidebar-toggle-btn:hover { background: rgba(60, 40, 100, 0.9); }
-        /* ===== เพิ่มใหม่: พอ sidebar เปิดออกมา (แตะปุ่มบนมือถือ หรือ hover บนคอม) ให้ปุ่ม toggle เลื่อนไปทางขวาพ้นแนว sidebar (68px + ระยะห่าง)
-           กันไม่ให้ปุ่มไปซ้อนทับกับโลโก้หมุนที่อยู่ในแถบเมนู (เดิมทั้งสองอยู่ตำแหน่งใกล้กันมากจนซ้อนทับ) ===== */
+        /* ===== เพิ่มใหม่: ซ่อนปุ่ม toggle ไปเลยตอนเปิดหน้าอื่นซ้อนอยู่ (อัปเกรด/ตั้งค่า/ประวัติ/ค้นหา) กันไม่ให้ไปทับปุ่มของหน้านั้นๆ (เดิมทับกันเพราะปุ่มนี้ลอยอยู่ตลอดไม่ว่าจะเปิดหน้าไหน) ===== */
+        .sidebar-toggle-btn.overlay-open { opacity: 0; pointer-events: none; }
         .sidebar-wrapper:has(.icon-sidebar.open) .sidebar-toggle-btn,
+        .sidebar-wrapper:has(.sidebar-hover-zone:hover) .sidebar-toggle-btn,
         .sidebar-wrapper:has(.icon-sidebar:hover) .sidebar-toggle-btn {
             left: 84px;
         }
@@ -59,7 +66,7 @@
         
         /* ===== แก้ไข: เปลี่ยน top จาก 0 เป็น 70px เว้นพื้นที่ให้แถบปุ่มอัปเกรดด้านบน ไม่ให้ข้อความแชทไปทับ/ขึ้นระดับเดียวกับปุ่ม ===== */
         /* ===== แก้ไข: เพิ่มระยะ top จาก 70px เป็น 90px ให้ข้อความแชทเริ่มต่ำกว่าแถบ header/ปุ่มอัปเกรดมากขึ้น ===== */
-        .chat-view { position: absolute; top: 90px; left: 0; right: 0; bottom: 100px; overflow-y: auto !important; padding: 20px; display: flex; flex-direction: column; gap: 15px; max-width: 600px; width: 50%; margin-left: auto; margin-right: auto; box-sizing: border-box; scroll-behavior: smooth; z-index: 2; transition: all 0.5s ease; }
+        .chat-view { position: absolute; top: 90px; left: 0; right: 0; bottom: 100px; overflow-y: auto !important; -webkit-overflow-scrolling: touch; padding: 20px; display: flex; flex-direction: column; gap: 15px; max-width: 600px; width: 50%; margin-left: auto; margin-right: auto; box-sizing: border-box; scroll-behavior: smooth; z-index: 2; transition: all 0.5s ease; }
         /* ===== เพิ่มใหม่: บนจอมือถือ (แคบกว่า 768px) ให้กล่องแชทกว้างเต็มจอแทน 50% ตายตัว (เดิมทำให้ข้อความบีบแคบเป็นแถบแคบๆตรงกลางจอ) ===== */
         @media (max-width: 768px) {
             .chat-view { width: 100%; max-width: 100%; top: 70px; bottom: 90px; padding: 14px; }
@@ -78,6 +85,17 @@
 
         /* ===== เพิ่มใหม่: กล่องครอบ welcomeContainer + inputWrapper (ตอนยังไม่เริ่มแชท) จัดกลางแนวตั้ง/นอนด้วย flexbox แทนตำแหน่ง % ===== */
         .hero-section { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; padding: 24px 20px; box-sizing: border-box; z-index: 4; }
+        /* ===== แก้ไข (บั๊กสำคัญ): เดิม hero-section ยังคงครอบเต็มจอค้างอยู่ตลอด แม้ #welcomeContainer ข้างในจะถูกซ่อนไปแล้วหลังเริ่มแชท
+           เพราะตัว div เองไม่เคยถูกซ่อน (ซ่อนแค่ลูกข้างใน) มันเลยไปดักจับการแตะ/scroll ทับ .chat-view ที่อยู่ข้างล่าง (z-index ต่ำกว่า) แบบไม่โชว์ให้เห็น
+           ทำให้เลื่อนดูข้อความแชทเก่าไม่ได้ทั้งบนมือถือและคอม แก้โดยปิดการดักจับด้วย pointer-events:none ตอนเริ่มแชทแล้ว
+           ส่วนกล่องพิมพ์ที่หลุดออกไปแบบ position:fixed (.is-chatting-input) ยังคงกดได้ปกติเพราะสั่ง pointer-events:auto ทับไว้เฉพาะจุด ===== */
+        .hero-section.chat-active { pointer-events: none; }
+        .hero-section.chat-active .is-chatting-input { pointer-events: auto; }
+        /* ===== แก้ไข (บั๊กหลัก): พอเริ่มแชทแล้ว .hero-section ยัง "ครอบเต็มจอ" อยู่แบบล่องหน (มองไม่เห็นเพราะไม่มีพื้นหลัง แต่ยังกินพื้นที่ทั้งจอ position:absolute inset:0)
+           ทำให้มันดักการปัดนิ้ว/scroll wheel ที่ตำแหน่งซ้อนทับกับ chat-view ไว้ก่อน chat-view จะได้รับ event เอง เลยเลื่อนแชทไม่ได้ทั้งคอมและมือถือ
+           แก้โดยปิด pointer-events ของทั้งกล่องนี้ทันทีที่เริ่มแชท (class .chatting) แล้วเปิดเฉพาะกล่องพิมพ์ข้อความที่ยังต้องกดได้กลับมา ===== */
+        .hero-section.chatting { pointer-events: none; }
+        .hero-section.chatting .bottom-input-container { pointer-events: auto; }
 
         /* ===== แก้ไข: เอา position:absolute + top:60% ออก ให้เป็นสมาชิกปกติของ .hero-section (flex) แทน ===== */
         .bottom-input-container { width: 100%; display: flex; justify-content: center; z-index: 3; transition: opacity 0.3s ease; padding: 0 20px; box-sizing: border-box; }
@@ -692,30 +710,17 @@
 
                     <div class="settings-divider"></div>
 
-                    <!-- รายการตั้งค่าแบบแถว สไตล์เดียวกับภาพตัวอย่าง -->
+                    <!-- ===== แก้ไข: เอา "รูปลักษณ์" กับ "ภาษา" ออก เพราะเดิมเป็นแค่ dropdown ตกแต่ง ไม่ได้เชื่อมกับฟังก์ชันจริง (แอปนี้เป็นธีมมืดล้วน+ภาษาไทยล้วนอยู่แล้ว)
+                         แทนที่ด้วยฟีเจอร์ "เสียงตอบกลับ" ที่ใช้งานได้จริง — เมื่อเปิดไว้ ETC จะอ่านคำตอบออกเสียงให้ฟังทุกครั้งที่ตอบจบ ===== -->
                     <div class="settings-row">
-                        <span>รูปลักษณ์</span>
-                        <select class="settings-select" id="themeSelect">
-                            <option value="dark">มืด (ระบบ)</option>
-                            <option value="dark-only">มืดเสมอ</option>
-                        </select>
-                    </div>
-                    <div class="settings-row">
-                        <span>ภาษา</span>
-                        <select class="settings-select" id="langSelect">
-                            <option value="th">ไทย</option>
-                            <option value="en">English</option>
-                        </select>
-                    </div>
-                    <div class="settings-row">
-                        <span>เสียงตอบกลับ</span>
+                        <span>🔊 เสียงตอบกลับ (อ่านคำตอบออกเสียง)</span>
                         <label class="settings-toggle">
-                            <input type="checkbox" id="soundToggle">
+                            <input type="checkbox" id="soundToggle" onchange="handleSoundToggleChange()">
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
-
-                    <div class="settings-divider"></div>
+                    <!-- ===== เพิ่มใหม่: ปุ่มทดสอบเสียงทันที ให้ผู้ใช้ได้ยินตัวอย่างว่าเสียงเป็นแบบไหนก่อนใช้งานจริง ===== -->
+                    <button class="ngrok-save-btn" onclick="speakText('สวัสดีค่ะ นี่คือตัวอย่างเสียงของ ETC ค่ะ')" style="width:100%; margin-top:8px; text-align:center;">🔊 ทดสอบเสียง</button>
 
                     <div class="settings-divider"></div>
                     <button class="settings-save-btn" onclick="saveProfileSettings()">บันทึกการตั้งค่า</button>
@@ -882,6 +887,43 @@
                 const s = localStorage.getItem("etc_user_profile");
                 if (s) userProfile = JSON.parse(s);
             } catch(e) {}
+        }
+
+        // ============================================================
+        // เสียงตอบกลับ (Text-to-Speech) — ใช้ Web Speech API ของเบราว์เซอร์เอง ไม่ต้องพึ่ง API ภายนอก ฟรี 100%
+        // ============================================================
+        // ===== เพิ่มใหม่: โหลดค่าที่เคยตั้งไว้ (เปิด/ปิดเสียง) จาก localStorage มาตั้งค่า checkbox ตอนเปิดหน้าเว็บ =====
+        function loadSoundSetting() {
+            try {
+                const saved = localStorage.getItem("etc_sound_enabled");
+                const toggle = document.getElementById("soundToggle");
+                if (toggle) toggle.checked = saved === "true";
+            } catch(e) {}
+        }
+
+        // ===== เพิ่มใหม่: บันทึกค่าเปิด/ปิดเสียงทันทีที่ผู้ใช้กดสวิตช์ (ไม่ต้องรอกด "บันทึกการตั้งค่า") =====
+        function handleSoundToggleChange() {
+            const enabled = document.getElementById("soundToggle").checked;
+            try { localStorage.setItem("etc_sound_enabled", enabled); } catch(e) {}
+            // ถ้าปิดเสียงระหว่างที่กำลังพูดอยู่ ให้หยุดพูดทันที
+            if (!enabled && "speechSynthesis" in window) window.speechSynthesis.cancel();
+        }
+
+        // ===== เพิ่มใหม่: อ่านข้อความออกเสียงเป็นภาษาไทย เรียกใช้ทั้งตอน ETC ตอบจบ และตอนกดปุ่ม "ทดสอบเสียง" ในหน้าตั้งค่า =====
+        function speakText(text) {
+            if (!("speechSynthesis" in window)) return; // เบราว์เซอร์รุ่นเก่าบางตัวอาจไม่รองรับ
+            const soundToggle = document.getElementById("soundToggle");
+            // ปุ่ม "ทดสอบเสียง" ให้พูดได้เสมอแม้สวิตช์จะปิดอยู่ก็ตาม (เผื่อผู้ใช้อยากลองฟังก่อนตัดสินใจเปิด)
+            const isTestButton = text.includes("ตัวอย่างเสียงของ ETC");
+            if (!isTestButton && soundToggle && !soundToggle.checked) return;
+
+            window.speechSynthesis.cancel(); // ยกเลิกเสียงที่อาจค้างพูดอยู่ก่อนหน้า กันเสียงซ้อนกัน
+            // ตัด markdown สัญลักษณ์ที่ไม่ต้องอ่านออกเสียงออกก่อน (เช่น *, #, `) ให้ฟังลื่นขึ้น
+            const cleanText = text.replace(/[*_#`~>|]/g, "").replace(/\n+/g, " ");
+            const utterance = new SpeechSynthesisUtterance(cleanText);
+            utterance.lang = "th-TH";
+            utterance.rate = 1.0;
+            window.speechSynthesis.speak(utterance);
         }
 
         function applyProfileToUI() {
@@ -1055,6 +1097,7 @@
         // ============================================================
         async function showHistoryPage() {
             document.getElementById("historyPage").classList.add("show");
+            setSidebarToggleHidden(true);
             const list = document.getElementById("historyList");
             list.innerHTML = '<div class="history-empty">⏳ กำลังโหลด...</div>';
             if (currentUserId) { await loadAllSessions(currentUserId); renderHistoryList(allSessions, list); }
@@ -1069,7 +1112,7 @@
             }).join("");
         }
 
-        function hideHistoryPage() { document.getElementById("historyPage").classList.remove("show"); }
+        function hideHistoryPage() { document.getElementById("historyPage").classList.remove("show"); setSidebarToggleHidden(false); }
 
         async function loadSession(sessionId) {
             hideHistoryPage();
@@ -1085,6 +1128,7 @@
                 isFirstMessage = false;
                 document.getElementById("welcomeContainer").classList.add("fade-out-up");
                 document.getElementById("inputWrapper").classList.add("is-chatting-input");
+                document.getElementById("heroSection").classList.add("chat-active");
                 (session.messages || []).forEach(m => {
                     const av = userProfile.avatarDataUrl ? `<div class="avatar-user" style="background-image:url(${userProfile.avatarDataUrl});background-size:cover;"></div>` : `<div class="avatar-user">${userProfile.name.substring(0,2).toUpperCase()}</div>`;
                     cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-user"><div class="chat-bubble">${m.userMsg}</div>${av}</div>`);
@@ -1111,6 +1155,7 @@
             isFirstMessage = true;
             document.getElementById("welcomeContainer").classList.remove("fade-out-up");
             document.getElementById("inputWrapper").classList.remove("is-chatting-input");
+            document.getElementById("heroSection").classList.remove("chat-active");
             if (currentUserId) await createNewSession(currentUserId);
         }
 
@@ -1119,11 +1164,12 @@
         // ============================================================
         function showSearchPage() {
             document.getElementById("searchPage").classList.add("show");
+            setSidebarToggleHidden(true);
             document.getElementById("searchInput").value = "";
             document.getElementById("searchBody").innerHTML = '<div class="history-empty">🔬 พิมพ์คำค้นหาด้านบนค่ะ</div>';
             setTimeout(() => document.getElementById("searchInput").focus(), 300);
         }
-        function hideSearchPage() { document.getElementById("searchPage").classList.remove("show"); }
+        function hideSearchPage() { document.getElementById("searchPage").classList.remove("show"); setSidebarToggleHidden(false); }
 
         function handleSearch(query) {
             const body = document.getElementById("searchBody");
@@ -1139,12 +1185,17 @@
         // ============================================================
         // Overlay helpers
         // ============================================================
-        function showUpgradePage() { document.getElementById("upgradePage").classList.add("show"); }
-        function hideUpgradePage() { document.getElementById("upgradePage").classList.remove("show"); }
+        // ===== เพิ่มใหม่: ซ่อน/แสดงปุ่ม toggle sidebar (☰) — เรียกใช้ทุกครั้งที่เปิด/ปิดหน้า overlay ใดๆ
+        // กันปุ่มนี้ไปทับกับปุ่มของหน้านั้นๆ (เช่น ปุ่ม "กลับไปหน้าแชท" ในหน้าอัปเกรด, ปุ่ม ✕ ปิดหน้าต่างๆ) ===== */
+        function setSidebarToggleHidden(hidden) {
+            document.getElementById("sidebarToggleBtn").classList.toggle("overlay-open", hidden);
+        }
+        function showUpgradePage() { document.getElementById("upgradePage").classList.add("show"); setSidebarToggleHidden(true); }
+        function hideUpgradePage() { document.getElementById("upgradePage").classList.remove("show"); setSidebarToggleHidden(false); }
         function showLogoPopup() { document.getElementById("logoPopup").classList.add("show"); }
         function hideLogoPopup() { document.getElementById("logoPopup").classList.remove("show"); }
-        function showSettingsPage() { document.getElementById("settingsPage").classList.add("show"); }
-        function hideSettingsPage() { document.getElementById("settingsPage").classList.remove("show"); }
+        function showSettingsPage() { document.getElementById("settingsPage").classList.add("show"); setSidebarToggleHidden(true); }
+        function hideSettingsPage() { document.getElementById("settingsPage").classList.remove("show"); setSidebarToggleHidden(false); }
 
         // ===== เพิ่มใหม่: เปิด/ปิด sidebar ซ้ายบนมือถือ (กดปุ่ม ☰) =====
         function toggleSidebar() {
@@ -1184,6 +1235,7 @@
             if (isFirstMessage) {
                 document.getElementById("welcomeContainer").classList.add("fade-out-up");
                 document.getElementById("inputWrapper").classList.add("is-chatting-input");
+                document.getElementById("heroSection").classList.add("chat-active");
                 isFirstMessage = false;
             }
             const text = input.value.trim();
@@ -1244,6 +1296,7 @@
                 }
                 chatHistory.push({ role:"assistant", content:fullResponse });
                 await saveMessageToFirestore(text, fullResponse);
+                speakText(fullResponse); // ===== เพิ่มใหม่: อ่านคำตอบออกเสียง (จะอ่านจริงก็ต่อเมื่อเปิดสวิตช์ "เสียงตอบกลับ" ไว้ในหน้าตั้งค่า) =====
             } catch(e) {
                 // ===== แก้ไข: โชว์ error message จริงๆ ในกล่องแชท ช่วยตอน debug (เดิมจะขึ้นแค่ "คำตอบถูกยกเลิกค่ะ" ทุกกรณี) =====
                 document.getElementById(botId).textContent = e.name === "AbortError" ? "คำตอบถูกยกเลิกค่ะ" : `ขออภัยค่ะ เกิดข้อผิดพลาด: ${e.message}`;
@@ -1257,6 +1310,7 @@
         // ============================================================
         loadUserProfile();
         applyProfileToUI();
+        loadSoundSetting();
     </script>
 </body>
 </html>
