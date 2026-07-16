@@ -112,7 +112,7 @@
         .row-bot { justify-content: flex-start; }
         .row-user { justify-content: flex-end; }
         /* ===== แก้ไข: เปลี่ยนสีพื้นหลังบับเบิลจากเทาเข้มล้วน เป็นโทนม่วง-น้ำเงินเข้ม ให้กลืนกับธีมพื้นหลังจักรวาล ===== */
-        .chat-bubble { width: fit-content; max-width: 80%; font-size: 16px; padding: 10px 16px; border-radius: 18px; background: rgba(38, 26, 64, 0.75); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(168, 199, 250, 0.15); color: #fff; }
+        .chat-bubble { width: fit-content; max-width: 80%; font-size: var(--chat-font-size, 16px); padding: 10px 16px; border-radius: 18px; background: rgba(38, 26, 64, 0.75); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(168, 199, 250, 0.15); color: #fff; }
         .row-user .chat-bubble { background-color: rgba(98, 0, 234, 0.7); }
         .avatar-user { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; background-color: #9c27b0; color: white; }
         .avatar-img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
@@ -299,6 +299,22 @@
             border-radius: 20px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.6);
             animation: logoPopupIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        /* ===== เพิ่มใหม่: ขยายหน้าตั้งค่าให้กว้างขึ้น เพื่อรองรับเมนูซ้าย+เนื้อหาขวาแบบ ChatGPT ===== */
+        .settings-panel.wide { max-width: 600px; max-height: 82vh; display: flex; flex-direction: column; }
+        .settings-layout { display: flex; flex: 1; min-height: 0; }
+        .settings-nav { width: 148px; flex-shrink: 0; border-right: 1px solid rgba(255,255,255,0.08); padding: 14px 8px; display: flex; flex-direction: column; gap: 3px; overflow-y: auto; }
+        .settings-nav-item { background: none; border: none; color: #b8b3c9; padding: 10px 12px; border-radius: 10px; text-align: left; cursor: pointer; font-size: 13.5px; transition: background 0.15s ease, color 0.15s ease; }
+        .settings-nav-item:hover { background: rgba(255,255,255,0.05); }
+        .settings-nav-item.active { background: rgba(168, 199, 250, 0.15); color: #fff; font-weight: 600; }
+        .settings-content { flex: 1; min-width: 0; padding: 20px 22px; overflow-y: auto; }
+        .settings-content::-webkit-scrollbar { width: 6px; }
+        .settings-content::-webkit-scrollbar-thumb { background-color: #555; border-radius: 4px; }
+        /* ===== มือถือจอแคบ: เปลี่ยนเมนูซ้ายเป็นแท็บแนวนอนด้านบนแทน ===== */
+        @media (max-width: 520px) {
+            .settings-layout { flex-direction: column; }
+            .settings-nav { width: 100%; flex-direction: row; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.08); overflow-x: auto; padding: 10px 8px; }
+            .settings-nav-item { white-space: nowrap; }
         }
         .settings-panel::-webkit-scrollbar { width: 6px; }
         .settings-panel::-webkit-scrollbar-thumb { background-color: #555; border-radius: 4px; }
@@ -691,41 +707,105 @@
 
         <!-- ===== เพิ่มใหม่: หน้าตั้งค่า (Settings) สไตล์คล้าย ChatGPT พร้อมโปรไฟล์ผู้ใช้ที่ตั้งค่าเองได้ ===== -->
         <div id="settingsPage" class="settings-overlay">
-            <div class="settings-panel">
+            <div class="settings-panel wide">
                 <div class="settings-header">
-                    <h2>ทั่วไป</h2>
+                    <h2>การตั้งค่า</h2>
                     <button class="settings-close-btn" onclick="hideSettingsPage()">✕</button>
                 </div>
 
-                <div class="settings-body">
-                    <!-- การ์ดโปรไฟล์ผู้ใช้ -->
-                    <div class="profile-card">
-                        <div class="profile-avatar-large" id="profileAvatarLarge" onclick="document.getElementById('avatarFileInput').click()">ME</div>
-                        <input type="file" id="avatarFileInput" accept="image/*" style="display:none" onchange="handleAvatarUpload(event)">
-                        <div class="profile-info">
-                            <input type="text" id="profileNameInput" class="profile-name-input" placeholder="ตั้งชื่อผู้ใช้ของคุณ" maxlength="20" autocomplete="off">
-                            <p class="profile-hint">แตะที่รูปวงกลมเพื่ออัปโหลดรูปโปรไฟล์ค่ะ</p>
+                <div class="settings-layout">
+                    <!-- ===== เพิ่มใหม่: เมนูซ้ายแยกหมวดหมู่ เหมือนหน้าตั้งค่า ChatGPT ===== -->
+                    <div class="settings-nav">
+                        <button class="settings-nav-item active" id="navBtn-general" onclick="showSettingsTab('general')">⚙️ ทั่วไป</button>
+                        <button class="settings-nav-item" id="navBtn-voice" onclick="showSettingsTab('voice')">🔊 เสียง</button>
+                        <button class="settings-nav-item" id="navBtn-account" onclick="showSettingsTab('account')">👤 บัญชี</button>
+                    </div>
+
+                    <div class="settings-content">
+                        <!-- ===== แท็บ: ทั่วไป ===== -->
+                        <div class="settings-tab" id="tab-general">
+                            <div class="profile-card">
+                                <div class="profile-avatar-large" id="profileAvatarLarge" onclick="document.getElementById('avatarFileInput').click()">ME</div>
+                                <input type="file" id="avatarFileInput" accept="image/*" style="display:none" onchange="handleAvatarUpload(event)">
+                                <div class="profile-info">
+                                    <input type="text" id="profileNameInput" class="profile-name-input" placeholder="ตั้งชื่อผู้ใช้ของคุณ" maxlength="20" autocomplete="off">
+                                    <p class="profile-hint">แตะที่รูปวงกลมเพื่ออัปโหลดรูปโปรไฟล์ค่ะ</p>
+                                </div>
+                            </div>
+
+                            <div class="settings-divider"></div>
+
+                            <!-- ===== เพิ่มใหม่: ปรับขนาดตัวอักษรในกล่องแชท ใช้งานได้จริง (เปลี่ยนขนาดตัวอักษรทั้งแอปทันที) ===== -->
+                            <div class="settings-row">
+                                <span>🔤 ขนาดตัวอักษรในแชท</span>
+                                <select class="settings-select" id="fontSizeSelect" onchange="handleFontSizeChange()">
+                                    <option value="14">เล็ก</option>
+                                    <option value="16" selected>กลาง</option>
+                                    <option value="19">ใหญ่</option>
+                                </select>
+                            </div>
+
+                            <!-- ===== เพิ่มใหม่: ระดับความคิดสร้างสรรค์ในการตอบ (ผูกกับค่า temperature จริงที่ส่งไป Groq) ===== -->
+                            <div class="settings-row" style="flex-direction:column; align-items:flex-start; gap:8px;">
+                                <span>🎨 ความคิดสร้างสรรค์ในการตอบ: <b id="creativityLabel">สมดุล</b></span>
+                                <input type="range" id="creativitySlider" min="0.3" max="0.9" step="0.1" value="0.7" style="width:100%;" oninput="handleCreativityChange()">
+                                <p class="profile-hint">ค่าต่ำ = ตอบตรงไปตรงมา แม่นยำ | ค่าสูง = ตอบมีสีสัน สร้างสรรค์กว่า</p>
+                            </div>
+
+                            <div class="settings-divider"></div>
+
+                            <!-- ===== เพิ่มใหม่: ปุ่มลบประวัติแชททั้งหมดในคลิกเดียว ใช้งานได้จริง (ลบจริงใน Firestore) ===== -->
+                            <button class="ngrok-save-btn" onclick="handleDeleteAllHistory()" style="width:100%; text-align:center; color:#ff8a80; border-color:rgba(231,76,60,0.3);">🗑️ ลบประวัติแชททั้งหมด</button>
+
+                            <div class="settings-divider"></div>
+                            <button class="settings-save-btn" onclick="saveProfileSettings()">บันทึกการตั้งค่า</button>
+                        </div>
+
+                        <!-- ===== แท็บ: เสียง ===== -->
+                        <div class="settings-tab" id="tab-voice" style="display:none;">
+                            <div class="settings-row">
+                                <span>🔊 เสียงตอบกลับ (อ่านคำตอบออกเสียง)</span>
+                                <label class="settings-toggle">
+                                    <input type="checkbox" id="soundToggle" onchange="handleSoundToggleChange()">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+
+                            <!-- ===== เพิ่มใหม่: เลือกเสียงพูดจริงจากเครื่อง กันปัญหาเสียงกลายเป็นภาษาอังกฤษ ===== -->
+                            <div class="settings-row" style="flex-direction:column; align-items:flex-start; gap:8px;">
+                                <span>🗣️ เลือกเสียงพูด</span>
+                                <select class="settings-select" id="voiceSelect" style="width:100%;" onchange="handleVoiceChange()">
+                                    <option value="">กำลังโหลดรายชื่อเสียง...</option>
+                                </select>
+                                <p class="profile-hint" id="voiceHint"></p>
+                                <p class="profile-hint" style="line-height:1.6;">
+                                    ถ้าไม่มีเสียงไทยให้เลือก: บนมือถือ Android ไปที่ การตั้งค่า → ระบบ → ภาษาและการป้อนข้อมูล → เอาต์พุตข้อความเป็นเสียงพูด → ติดตั้งเสียงภาษาไทย
+                                    ส่วนบนคอม Windows ไปที่ การตั้งค่า → เวลาและภาษา → เสียงพูด → เพิ่มเสียง → เลือกภาษาไทย
+                                </p>
+                            </div>
+
+                            <div class="settings-row" style="flex-direction:column; align-items:flex-start; gap:8px;">
+                                <span>⏩ ความเร็วเสียงพูด: <b id="voiceRateLabel">1.0x</b></span>
+                                <input type="range" id="voiceRateSlider" min="0.5" max="1.8" step="0.1" value="1" style="width:100%;" oninput="handleVoiceRateChange()">
+                            </div>
+
+                            <button class="ngrok-save-btn" onclick="speakText('สวัสดีค่ะ นี่คือตัวอย่างเสียงของ ETC ค่ะ')" style="width:100%; margin-top:4px; text-align:center;">🔊 ทดสอบเสียง</button>
+                        </div>
+
+                        <!-- ===== แท็บ: บัญชี ===== -->
+                        <div class="settings-tab" id="tab-account" style="display:none;">
+                            <div class="settings-row">
+                                <span>📧 อีเมลที่เข้าสู่ระบบ</span>
+                                <span id="accountEmailDisplay" style="color:#8a8597; font-size:13px;">-</span>
+                            </div>
+                            <div class="settings-divider"></div>
+                            <!-- ===== เพิ่มใหม่: ปุ่มรีเซ็ตรหัสผ่านจริง ผ่าน Firebase (ส่งลิงก์ไปที่อีเมล) ===== -->
+                            <p class="profile-hint" style="margin-bottom:10px;">ระบบจะส่งลิงก์สำหรับตั้งรหัสผ่านใหม่ไปที่อีเมลของคุณค่ะ</p>
+                            <button class="ngrok-save-btn" onclick="handlePasswordReset()" style="width:100%; text-align:center;">🔑 ส่งอีเมลรีเซ็ตรหัสผ่าน</button>
+                            <div class="settings-divider"></div>
+                            <button class="settings-save-btn" onclick="handleLogout()" style="background:rgba(231,76,60,0.3);border:1px solid rgba(231,76,60,0.4);">ออกจากระบบ</button>
                         </div>
                     </div>
-
-                    <div class="settings-divider"></div>
-
-                    <!-- ===== แก้ไข: เอา "รูปลักษณ์" กับ "ภาษา" ออก เพราะเดิมเป็นแค่ dropdown ตกแต่ง ไม่ได้เชื่อมกับฟังก์ชันจริง (แอปนี้เป็นธีมมืดล้วน+ภาษาไทยล้วนอยู่แล้ว)
-                         แทนที่ด้วยฟีเจอร์ "เสียงตอบกลับ" ที่ใช้งานได้จริง — เมื่อเปิดไว้ ETC จะอ่านคำตอบออกเสียงให้ฟังทุกครั้งที่ตอบจบ ===== -->
-                    <div class="settings-row">
-                        <span>🔊 เสียงตอบกลับ (อ่านคำตอบออกเสียง)</span>
-                        <label class="settings-toggle">
-                            <input type="checkbox" id="soundToggle" onchange="handleSoundToggleChange()">
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
-                    <!-- ===== เพิ่มใหม่: ปุ่มทดสอบเสียงทันที ให้ผู้ใช้ได้ยินตัวอย่างว่าเสียงเป็นแบบไหนก่อนใช้งานจริง ===== -->
-                    <button class="ngrok-save-btn" onclick="speakText('สวัสดีค่ะ นี่คือตัวอย่างเสียงของ ETC ค่ะ')" style="width:100%; margin-top:8px; text-align:center;">🔊 ทดสอบเสียง</button>
-
-                    <div class="settings-divider"></div>
-                    <button class="settings-save-btn" onclick="saveProfileSettings()">บันทึกการตั้งค่า</button>
-                    <!-- ===== เพิ่มใหม่: ปุ่มออกจากระบบ ===== -->
-                    <button class="settings-save-btn" onclick="handleLogout()" style="background:rgba(231,76,60,0.3);border:1px solid rgba(231,76,60,0.4);margin-top:8px;">ออกจากระบบ</button>
                 </div>
             </div>
         </div>
@@ -814,7 +894,7 @@
 
         // ===== แก้ไข: เอาวันที่/เวลาที่ฝังตายตัว (${today}/${timeNow}) ออกจาก system prompt
         // และเพิ่มกฎข้อ 6 ห้ามทักทายซ้ำทุกข้อความ (เดิมกฎข้อ 1 เขียนกว้างเกินไป โมเดลเลยทักทายทุกครั้งที่ตอบ) =====
-        let chatHistory = [{ role: "system", content: `คุณคือ ETC เลขาสาวผู้ชาญฉลาด เพศหญิง คุณมีความเชี่ยวชาญพิเศษด้านวิทยาศาสตร์และอิเล็กทรอนิกส์ แต่คุณสามารถตอบคำถามทั่วไป ประวัติศาสตร์ หรือเรื่องอื่นๆ ได้อย่างครบถ้วนและสุภาพ | กฎ: 1. ตอบให้ครบถ้วนละเอียด ไม่สั้นห้วนจนเกินไป ถ้าเหมาะสมให้ยกตัวอย่างประกอบหรือแนะนำเรื่องที่เกี่ยวข้องเพิ่มเติมท้ายคำตอบด้วย | 2. ห้ามพูดถึงวันที่/เวลาเองเด็ดขาด ยกเว้นถูกถามตรงๆ ให้ใช้ข้อมูลวันที่/เวลาปัจจุบันที่ระบบแจ้งให้ในข้อความ system ล่าสุดเท่านั้น ห้ามเดาหรือจำวันที่เก่าจากตอนต้นบทสนทนา | 3. วิทยาศาสตร์/อิเล็กทรอนิกส์ตอบเชี่ยวชาญ | 4. ลงท้ายด้วย ค่ะ เสมอ | 5. ห้ามใช้ ครับ ผม เด็ดขาด | 6. ทักทาย (เช่น สวัสดีค่ะ) ได้เฉพาะข้อความแรกสุดของบทสนทนาเท่านั้น ข้อความถัดๆไปห้ามทักทายซ้ำอีก ให้ตอบเข้าประเด็นคำถามได้เลย | 7. ห้ามพูดคำหรือวลีเดิมซ้ำๆวนไปมาเด็ดขาด ถ้าตอบยาวให้เรียบเรียงเนื้อหาใหม่ทุกประโยค ห้ามคัดลอกรูปแบบประโยคเดิมซ้ำ` }];
+        let chatHistory = [{ role: "system", content: `คุณคือ ETC เลขาสาวผู้ชาญฉลาด เพศหญิง คุณมีความเชี่ยวชาญพิเศษด้านวิทยาศาสตร์และอิเล็กทรอนิกส์ แต่คุณสามารถตอบคำถามทั่วไป ประวัติศาสตร์ หรือเรื่องอื่นๆ ได้อย่างครบถ้วนและสุภาพ | กฎ: 1. ตอบให้ครบถ้วนละเอียด ไม่สั้นห้วนจนเกินไป ถ้าเหมาะสมให้ยกตัวอย่างประกอบหรือแนะนำเรื่องที่เกี่ยวข้องเพิ่มเติมท้ายคำตอบด้วย | 2. ห้ามพูดถึงวันที่/เวลาเองเด็ดขาด ยกเว้นถูกถามตรงๆ ให้ใช้ข้อมูลวันที่/เวลาปัจจุบันที่ระบบแจ้งให้ในข้อความ system ล่าสุดเท่านั้น ห้ามเดาหรือจำวันที่เก่าจากตอนต้นบทสนทนา | 3. วิทยาศาสตร์/อิเล็กทรอนิกส์ตอบเชี่ยวชาญ | 4. ลงท้ายด้วย ค่ะ เสมอ | 5. ห้ามใช้ ครับ ผม เด็ดขาด | 6. ทักทาย (เช่น สวัสดีค่ะ) ได้เฉพาะข้อความแรกสุดของบทสนทนาเท่านั้น ข้อความถัดๆไปห้ามทักทายซ้ำอีก ให้ตอบเข้าประเด็นคำถามได้เลย | 7. ห้ามพูดคำหรือวลีเดิมซ้ำๆวนไปมาเด็ดขาด ถ้าตอบยาวให้เรียบเรียงเนื้อหาใหม่ทุกประโยค ห้ามคัดลอกรูปแบบประโยคเดิมซ้ำ | 8. ตอบเป็นภาษาไทยล้วนเท่านั้นเสมอ ห้ามแทรกคำหรืออักษรภาษาจีน ญี่ปุ่น เกาหลี หรือภาษาอื่นใดที่ไม่ใช่ไทยโดยเด็ดขาด ยกเว้นชื่อเฉพาะที่เป็นสากล (เช่น ชื่อคน ชื่อสถานที่ ชื่อสารเคมี หน่วยวัด หรือศัพท์เทคนิคที่ไม่มีคำแปลไทย) ซึ่งอนุญาตให้ใช้ภาษาอังกฤษได้เท่านั้น ถ้าไม่แน่ใจว่าคำไหนมีคำแปลไทยหรือไม่ ให้เลือกใช้คำไทยไว้ก่อนเสมอ` }];
 
         // ===== เพิ่มใหม่: ฟังก์ชันคำนวณวันที่/เวลาปัจจุบัน "สดใหม่" ทุกครั้งที่เรียก (ไม่ใช่ค่าคงที่ตอนโหลดหน้า) =====
         function getCurrentDateTimeSystemMessage() {
@@ -909,7 +989,80 @@
             if (!enabled && "speechSynthesis" in window) window.speechSynthesis.cancel();
         }
 
-        // ===== เพิ่มใหม่: อ่านข้อความออกเสียงเป็นภาษาไทย เรียกใช้ทั้งตอน ETC ตอบจบ และตอนกดปุ่ม "ทดสอบเสียง" ในหน้าตั้งค่า =====
+        // ===== เพิ่มใหม่ (แก้บั๊กเสียงเป็นอังกฤษ): โหลดรายชื่อเสียงพูดที่ "มีอยู่จริงในเครื่อง/เบราว์เซอร์" มาให้เลือก
+        // สาเหตุเดิมที่เสียงออกมาเป็นอังกฤษ: โค้ดสั่ง utterance.lang="th-TH" ไปเฉยๆ แต่ไม่เคยเช็คว่าเครื่องมีเสียงไทยจริงไหม
+        // ถ้าเครื่อง/เบราว์เซอร์ไม่มีเสียงไทยติดตั้งไว้ ระบบจะเงียบๆ fallback ไปใช้เสียงเริ่มต้น (มักเป็นอังกฤษ) โดยไม่มี error ใดๆ
+        // วิธีแก้: ดึงรายชื่อเสียงทั้งหมดที่เครื่องมีจริง มาให้ผู้ใช้เลือกเอง จะได้รู้ว่าเครื่องตัวเองมีเสียงไทยให้เลือกหรือเปล่า =====
+        function loadAvailableVoices() {
+            if (!("speechSynthesis" in window)) return;
+            const voices = window.speechSynthesis.getVoices();
+            if (!voices.length) return; // เบราว์เซอร์บางตัวโหลดรายชื่อเสียงช้า จะลองใหม่ตอน event voiceschanged ยิงมา
+
+            const select = document.getElementById("voiceSelect");
+            const hint = document.getElementById("voiceHint");
+            if (!select) return;
+
+            const thaiVoices = voices.filter(v => v.lang.toLowerCase().startsWith("th"));
+            const otherVoices = voices.filter(v => !v.lang.toLowerCase().startsWith("th"));
+            const savedURI = localStorage.getItem("etc_voice_uri") || "";
+
+            select.innerHTML = "";
+            if (thaiVoices.length) {
+                const grp = document.createElement("optgroup");
+                grp.label = "🇹🇭 เสียงภาษาไทย (แนะนำ)";
+                thaiVoices.forEach(v => {
+                    const opt = document.createElement("option");
+                    opt.value = v.voiceURI; opt.textContent = v.name;
+                    grp.appendChild(opt);
+                });
+                select.appendChild(grp);
+                hint.textContent = `พบเสียงไทยในเครื่อง ${thaiVoices.length} เสียงค่ะ`;
+                hint.style.color = "#2ecc71";
+            } else {
+                hint.textContent = "⚠️ ไม่พบเสียงภาษาไทยในเครื่องนี้ เสียงจะออกเป็นภาษาอื่นแทน (ดูวิธีติดตั้งเสียงไทยด้านล่าง)";
+                hint.style.color = "#f39c12";
+            }
+            if (otherVoices.length) {
+                const grp2 = document.createElement("optgroup");
+                grp2.label = "เสียงภาษาอื่น";
+                otherVoices.forEach(v => {
+                    const opt = document.createElement("option");
+                    opt.value = v.voiceURI; opt.textContent = `${v.name} (${v.lang})`;
+                    grp2.appendChild(opt);
+                });
+                select.appendChild(grp2);
+            }
+            if (savedURI && voices.some(v => v.voiceURI === savedURI)) select.value = savedURI;
+        }
+        // เบราว์เซอร์หลายตัว (โดยเฉพาะ Chrome) โหลดรายชื่อเสียงแบบ async ต้องรอ event นี้ก่อนถึงจะได้รายชื่อครบ
+        if ("speechSynthesis" in window) {
+            window.speechSynthesis.onvoiceschanged = loadAvailableVoices;
+        }
+
+        // ===== เพิ่มใหม่: บันทึกเสียงที่เลือกไว้ ===== 
+        function handleVoiceChange() {
+            const uri = document.getElementById("voiceSelect").value;
+            try { localStorage.setItem("etc_voice_uri", uri); } catch(e) {}
+        }
+
+        // ===== เพิ่มใหม่: ปรับ+บันทึกความเร็วเสียงพูด =====
+        function handleVoiceRateChange() {
+            const rate = document.getElementById("voiceRateSlider").value;
+            document.getElementById("voiceRateLabel").textContent = parseFloat(rate).toFixed(1) + "x";
+            try { localStorage.setItem("etc_voice_rate", rate); } catch(e) {}
+        }
+
+        // ===== เพิ่มใหม่: โหลดค่าความเร็วที่เคยบันทึกไว้มาตั้งใน slider ตอนเปิดหน้าเว็บ =====
+        function loadVoiceRateSetting() {
+            try {
+                const saved = localStorage.getItem("etc_voice_rate") || "1";
+                const slider = document.getElementById("voiceRateSlider");
+                if (slider) { slider.value = saved; document.getElementById("voiceRateLabel").textContent = parseFloat(saved).toFixed(1) + "x"; }
+            } catch(e) {}
+        }
+
+        // ===== แก้ไข: อ่านข้อความออกเสียง โดยเลือก "เสียงไทยจริง" ที่ผู้ใช้เลือกไว้ (ถ้ามี) แทนการปล่อยให้เบราว์เซอร์ fallback เอง
+        // เรียกใช้ทั้งตอน ETC ตอบจบ และตอนกดปุ่ม "ทดสอบเสียง" ในหน้าตั้งค่า =====
         function speakText(text) {
             if (!("speechSynthesis" in window)) return; // เบราว์เซอร์รุ่นเก่าบางตัวอาจไม่รองรับ
             const soundToggle = document.getElementById("soundToggle");
@@ -921,9 +1074,55 @@
             // ตัด markdown สัญลักษณ์ที่ไม่ต้องอ่านออกเสียงออกก่อน (เช่น *, #, `) ให้ฟังลื่นขึ้น
             const cleanText = text.replace(/[*_#`~>|]/g, "").replace(/\n+/g, " ");
             const utterance = new SpeechSynthesisUtterance(cleanText);
-            utterance.lang = "th-TH";
-            utterance.rate = 1.0;
+
+            // ===== เพิ่มใหม่: ผูกเสียงจริงที่ผู้ใช้เลือกไว้ในหน้าตั้งค่า (ถ้าเลือกไว้) =====
+            try {
+                const savedURI = localStorage.getItem("etc_voice_uri");
+                if (savedURI) {
+                    const match = window.speechSynthesis.getVoices().find(v => v.voiceURI === savedURI);
+                    if (match) { utterance.voice = match; utterance.lang = match.lang; }
+                }
+            } catch(e) {}
+            if (!utterance.voice) utterance.lang = "th-TH"; // ถ้ายังไม่ได้เลือกเสียงเอง ให้ลองขอเสียงไทยตามเดิม
+
+            // ===== เพิ่มใหม่: ใช้ความเร็วที่บันทึกไว้ =====
+            try { utterance.rate = parseFloat(localStorage.getItem("etc_voice_rate")) || 1.0; } catch(e) { utterance.rate = 1.0; }
+
             window.speechSynthesis.speak(utterance);
+        }
+
+        // ===== เพิ่มใหม่: ปรับขนาดตัวอักษรในกล่องแชท (ใช้งานได้จริงทันที ไม่ต้องรีโหลดหน้า) =====
+        function handleFontSizeChange() {
+            const size = document.getElementById("fontSizeSelect").value;
+            document.documentElement.style.setProperty("--chat-font-size", size + "px");
+            try { localStorage.setItem("etc_font_size", size); } catch(e) {}
+        }
+        function loadFontSizeSetting() {
+            try {
+                const saved = localStorage.getItem("etc_font_size") || "16";
+                document.documentElement.style.setProperty("--chat-font-size", saved + "px");
+                const sel = document.getElementById("fontSizeSelect");
+                if (sel) sel.value = saved;
+            } catch(e) {}
+        }
+
+        // ===== เพิ่มใหม่: ลบประวัติแชททั้งหมดในคลิกเดียว (ลบจริงใน Firestore ทุก session ของผู้ใช้คนนี้) =====
+        async function handleDeleteAllHistory() {
+            if (!currentUserId) { alert("กรุณาเข้าสู่ระบบก่อนค่ะ"); return; }
+            if (!confirm("ต้องการลบประวัติแชททั้งหมดใช่ไหมคะ? การลบนี้ย้อนกลับไม่ได้ค่ะ")) return;
+            try {
+                await loadAllSessions(currentUserId);
+                const deletePromises = allSessions.map(s =>
+                    db.collection("users").doc(currentUserId).collection("sessions").doc(s.id).delete()
+                );
+                await Promise.all(deletePromises);
+                allSessions = [];
+                hideSettingsPage();
+                await startNewChat();
+                alert("ลบประวัติแชททั้งหมดเรียบร้อยแล้วค่ะ");
+            } catch(e) {
+                alert("เกิดข้อผิดพลาดในการลบค่ะ: " + e.message);
+            }
         }
 
         function applyProfileToUI() {
@@ -1194,8 +1393,45 @@
         function hideUpgradePage() { document.getElementById("upgradePage").classList.remove("show"); setSidebarToggleHidden(false); }
         function showLogoPopup() { document.getElementById("logoPopup").classList.add("show"); }
         function hideLogoPopup() { document.getElementById("logoPopup").classList.remove("show"); }
-        function showSettingsPage() { document.getElementById("settingsPage").classList.add("show"); setSidebarToggleHidden(true); }
+        function showSettingsPage() {
+            document.getElementById("settingsPage").classList.add("show");
+            setSidebarToggleHidden(true);
+            // ===== เพิ่มใหม่: แสดงอีเมลของบัญชีที่ login อยู่ในแท็บ "บัญชี" =====
+            const emailEl = document.getElementById("accountEmailDisplay");
+            if (emailEl && auth.currentUser) emailEl.textContent = auth.currentUser.email;
+        }
         function hideSettingsPage() { document.getElementById("settingsPage").classList.remove("show"); setSidebarToggleHidden(false); }
+
+        // ===== เพิ่มใหม่: สลับแท็บในหน้าตั้งค่า (ทั่วไป/เสียง/บัญชี) เหมือนหน้าตั้งค่า ChatGPT =====
+        function showSettingsTab(tabName) {
+            document.querySelectorAll(".settings-tab").forEach(el => el.style.display = "none");
+            document.querySelectorAll(".settings-nav-item").forEach(el => el.classList.remove("active"));
+            document.getElementById("tab-" + tabName).style.display = "block";
+            document.getElementById("navBtn-" + tabName).classList.add("active");
+        }
+
+        // ===== เพิ่มใหม่: ส่งอีเมลรีเซ็ตรหัสผ่านจริงผ่าน Firebase =====
+        function handlePasswordReset() {
+            if (!auth.currentUser || !auth.currentUser.email) { alert("ไม่พบอีเมลของบัญชีนี้ค่ะ"); return; }
+            auth.sendPasswordResetEmail(auth.currentUser.email)
+                .then(() => alert("ส่งลิงก์รีเซ็ตรหัสผ่านไปที่ " + auth.currentUser.email + " แล้วค่ะ กรุณาเช็คอีเมล"))
+                .catch((e) => alert("เกิดข้อผิดพลาดค่ะ: " + e.message));
+        }
+
+        // ===== เพิ่มใหม่: ปรับ+บันทึกระดับความคิดสร้างสรรค์ (ผูกกับ temperature จริงที่ส่งไป Groq) =====
+        function handleCreativityChange() {
+            const val = parseFloat(document.getElementById("creativitySlider").value);
+            const label = document.getElementById("creativityLabel");
+            label.textContent = val <= 0.4 ? "แม่นยำ" : val >= 0.8 ? "สร้างสรรค์" : "สมดุล";
+            try { localStorage.setItem("etc_creativity", val); } catch(e) {}
+        }
+        function loadCreativitySetting() {
+            try {
+                const saved = parseFloat(localStorage.getItem("etc_creativity")) || 0.7;
+                const slider = document.getElementById("creativitySlider");
+                if (slider) { slider.value = saved; handleCreativityChange(); }
+            } catch(e) {}
+        }
 
         // ===== เพิ่มใหม่: เปิด/ปิด sidebar ซ้ายบนมือถือ (กดปุ่ม ☰) =====
         function toggleSidebar() {
@@ -1217,11 +1453,12 @@
         // Chat
         // ============================================================
         function getTemperatureForText(text) {
+            // ===== เพิ่มใหม่: ใช้ค่า "ความคิดสร้างสรรค์" ที่ผู้ใช้ตั้งไว้เองในหน้าตั้งค่าเป็นค่าเริ่มต้น (แทนค่าคงที่ 0.7 เดิม) =====
+            let base = 0.7;
+            try { base = parseFloat(localStorage.getItem("etc_creativity")) || 0.7; } catch(e) {}
             const kw = ["แต่งกลอน","แต่งเพลง","เขียนเรียงความ","แต่งนิยาย","แต่งเรื่อง","เขียนบทกวี","แต่งคำกลอน","เขียนนิทาน","แต่งเนื้อเพลง"];
-            for (const k of kw) { if (text.toLowerCase().includes(k)) return 0.9; }
-            // ===== แก้ไข: เปลี่ยนจาก 0.1 (ต่ำเกินไป) เป็น 0.7 ตามค่าที่ Qwen แนะนำสำหรับโหมดสนทนาทั่วไป (non-thinking mode)
-            // temperature ต่ำเกินไปมีส่วนทำให้โมเดลติดวนซ้ำคำเดิม (เจอปัญหา "ท่องชื่อซ้ำไม่จบ") ร่วมกับการไม่ได้ตั้ง presence_penalty ไว้ =====
-            return 0.7;
+            for (const k of kw) { if (text.toLowerCase().includes(k)) return Math.min(base + 0.15, 0.95); }
+            return base;
         }
 
         function handleSendAction() {
@@ -1311,6 +1548,10 @@
         loadUserProfile();
         applyProfileToUI();
         loadSoundSetting();
+        loadVoiceRateSetting();
+        loadFontSizeSetting();
+        loadCreativitySetting();
+        loadAvailableVoices(); // เผื่อบางเบราว์เซอร์โหลดรายชื่อเสียงพร้อมใช้ทันทีโดยไม่ต้องรอ event voiceschanged
     </script>
 </body>
 </html>
