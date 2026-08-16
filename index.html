@@ -12,6 +12,16 @@
     <!-- ===== เพิ่มใหม่: Firestore SDK สำหรับเก็บประวัติแชท ===== -->
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
     <style>
+        /* ===== เพิ่มใหม่: ตัวแปรสีธีมหลัก (accent) ที่ผู้ใช้ปรับได้เองในหน้าตั้งค่า ค่าเริ่มต้นคือโทนม่วง-ฟ้าเดิมของแอป ===== */
+        :root {
+            --accent1: #a8c7fa;
+            --accent2: #9c27b0;
+        }
+        /* ===== เพิ่มใหม่: ปุ่มวงกลมเลือกสีธีมในหน้าตั้งค่า ===== */
+        .accent-swatch-row { display: flex; gap: 10px; margin-top: 4px; }
+        .accent-swatch { width: 32px; height: 32px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: transform 0.15s ease, border-color 0.15s ease; flex-shrink: 0; }
+        .accent-swatch:hover { transform: scale(1.1); }
+        .accent-swatch.active { border-color: #fff; }
         /* ===== แก้ไข: ใช้ 100vh เป็นค่าตั้งต้น (เผื่อเบราว์เซอร์เก่า) แล้วทับด้วย 100dvh ===== */
         /* dvh = dynamic viewport height จะปรับตามพื้นที่จอที่เหลือจริงๆ เมื่อแป้นพิมพ์มือถือเด้งขึ้นมา ต่างจาก vh ที่คงที่ตายตัว ทำให้ก่อนหน้านี้ทุกอย่างเลื่อนตำแหน่งมั่วตอนพิมพ์ */
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; display: flex; height: 100vh; height: 100dvh; overflow: hidden; background-color: #000; }
@@ -106,14 +116,14 @@
         /* ===== แก้ไข: เปลี่ยนสีพื้นหลังจากเทาเข้มล้วน เป็นโทนม่วง-น้ำเงินเข้มให้กลืนกับพื้นหลังจักรวาล ปรับสีขอบและเงาให้เข้าธีมเดียวกัน ===== */
         .gemini-input-box { width: 100%; max-width: 760px; background-color: rgba(38, 26, 64, 0.75); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-radius: 32px; padding: 8px 20px; display: flex; align-items: center; border: 1px solid rgba(168, 199, 250, 0.2); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7), 0 4px 12px rgba(20, 10, 40, 0.6), 0 0 30px rgba(156, 39, 176, 0.2); }
         .gemini-input-box input { flex: 1; background: transparent; border: none; outline: none; color: #e3e3e3; font-size: 16px; padding: 12px 6px; }
-        .send-arrow-btn { background: transparent; color: #a8c7fa; border: none; cursor: pointer; font-size: 18px; padding: 10px; }
+        .send-arrow-btn { background: transparent; color: var(--accent1, #a8c7fa); border: none; cursor: pointer; font-size: 18px; padding: 10px; }
         
         .chat-row { width: 100%; display: flex; align-items: flex-end; gap: 12px; }
         .row-bot { justify-content: flex-start; }
         .row-user { justify-content: flex-end; }
         /* ===== แก้ไข: เปลี่ยนสีพื้นหลังบับเบิลจากเทาเข้มล้วน เป็นโทนม่วง-น้ำเงินเข้ม ให้กลืนกับธีมพื้นหลังจักรวาล ===== */
         .chat-bubble { width: fit-content; max-width: 80%; font-size: var(--chat-font-size, 16px); padding: 10px 16px; border-radius: 18px; background: rgba(38, 26, 64, 0.75); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(168, 199, 250, 0.15); color: #fff; }
-        .row-user .chat-bubble { background-color: rgba(98, 0, 234, 0.7); }
+        .row-user .chat-bubble { background-color: var(--accent2, rgba(98, 0, 234, 0.7)); }
         .avatar-user { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; background-color: #9c27b0; color: white; }
         .avatar-img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
         .menu-icon { color: #c4c7c5; font-size: 18px; cursor: pointer; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
@@ -130,7 +140,7 @@
 
         /* ===== เพิ่มใหม่: ใช้กรณีรูป avatar โหลดไม่ขึ้น (เช่น ยังไม่มีไฟล์ img/ETC.webp) ===== */
         /* แทนที่จะขึ้นไอคอนรูปแตก จะโชว์วงกลมสีพื้นแทนแบบสวยงาม */
-        .avatar-img.avatar-fallback { background: linear-gradient(135deg, #a8c7fa, #9c27b0); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; color: #fff; }
+        .avatar-img.avatar-fallback { background: linear-gradient(135deg, var(--accent1, #a8c7fa), var(--accent2, #9c27b0)); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; color: #fff; }
 
         /* ===== เพิ่มใหม่: fallback ของโลโก้ ใช้กรณีไฟล์ img/ETC.png เสียหรือเปิดไม่ได้ แสดงวงกลม gradient แทนไอคอนแตก ===== */
         .logo-spin.logo-fallback { background: conic-gradient(from 0deg, #ffb4a2, #a8c7fa, #9c27b0, #ffb4a2); }
@@ -429,7 +439,7 @@
             transition: 0.25s;
         }
         .settings-toggle input:checked + .toggle-slider {
-            background: linear-gradient(135deg, #a8c7fa, #9c27b0);
+            background: linear-gradient(135deg, var(--accent1, #a8c7fa), var(--accent2, #9c27b0));
         }
         .settings-toggle input:checked + .toggle-slider::before {
             transform: translateX(18px);
@@ -437,7 +447,7 @@
 
         .settings-save-btn {
             width: 100%;
-            background: linear-gradient(135deg, #a8c7fa, #9c27b0);
+            background: linear-gradient(135deg, var(--accent1, #a8c7fa), var(--accent2, #9c27b0));
             color: #fff;
             border: none;
             border-radius: 12px;
@@ -554,7 +564,7 @@
 
         .auth-btn {
             width: 100%;
-            background: linear-gradient(135deg, #a8c7fa, #9c27b0);
+            background: linear-gradient(135deg, var(--accent1, #a8c7fa), var(--accent2, #9c27b0));
             color: #fff;
             border: none;
             border-radius: 12px;
@@ -679,10 +689,22 @@
                 <h1 id="centerTitle">สวัสดีค่ะ มีอะไรให้ ETC ช่วยดูแลไหมคะ?</h1>
             </div>
 
-            <div id="inputWrapper" class="bottom-input-container">
+            <div id="inputWrapper" class="bottom-input-container" style="flex-direction:column; align-items:center; gap:8px;">
+                <!-- ===== เพิ่มใหม่: กล่องพรีวิวรูปที่เลือกไว้ก่อนกดส่ง (ซ่อนไว้เป็นค่าเริ่มต้น) ===== -->
+                <div id="imagePreviewBox" style="display:none; max-width:760px; width:100%; padding:0 4px;">
+                    <div style="position:relative; display:inline-block;">
+                        <img id="imagePreviewThumb" style="max-height:70px; border-radius:12px; border:1px solid rgba(168,199,250,0.3);">
+                        <button onclick="clearImageAttachment()" style="position:absolute; top:-8px; right:-8px; width:22px; height:22px; border-radius:50%; background:#e74c3c; color:#fff; border:none; cursor:pointer; font-size:12px;">✕</button>
+                    </div>
+                </div>
                 <div class="gemini-input-box">
+                    <!-- ===== เพิ่มใหม่: ปุ่มแนบรูปภาพ ให้ AI (qwen3.6-27b) ดูภาพและวิเคราะห์ได้ ===== -->
+                    <input type="file" id="imageFileInput" accept="image/*" style="display:none" onchange="handleImageAttach(event)">
+                    <button class="send-arrow-btn" onclick="document.getElementById('imageFileInput').click()" title="แนบรูปภาพให้ ETC ดู">📷</button>
                     <!-- ===== แก้ไข: เพิ่ม autocomplete="off" และ name แบบสุ่ม เพื่อปิดการจำคำที่เคยพิมพ์ของเบราว์เซอร์ (popup "Saved info") ===== -->
-                    <input type="text" id="userInputText" name="etc-chat-input-no-save" autocomplete="off" placeholder="พิมพ์ข้อความที่นี่..." onkeypress="if(event.key==='Enter') handleSendAction()">
+                    <input type="text" id="userInputText" name="etc-chat-input-no-save" autocomplete="off" placeholder="พิมพ์ข้อความ หรือลองพูด 'วาดรูป...' ค่ะ" onkeypress="if(event.key==='Enter') handleSendAction()">
+                    <!-- ===== เพิ่มใหม่: ปุ่มไมโครโฟนพิมพ์ด้วยเสียง ซ่อนไว้เป็นค่าเริ่มต้น (โชว์เมื่อเปิดสวิตช์ในหน้าตั้งค่า) ===== -->
+                    <button class="send-arrow-btn" id="micBtn" onclick="toggleDictation()" style="display:none;" title="พูดแทนพิมพ์">🎙️</button>
                     <button class="send-arrow-btn" id="actionBtn" onclick="handleSendAction()">➔</button>
                 </div>
             </div>
@@ -734,6 +756,32 @@
                             </div>
 
                             <div class="settings-divider"></div>
+
+                            <!-- ===== เพิ่มใหม่: เลือกสีธีมของแอป (Accent color) ใช้งานได้จริง เปลี่ยนสีปุ่ม/อวตาร์/บับเบิลข้อความทันที ===== -->
+                            <div class="settings-row" style="flex-direction:column; align-items:flex-start; gap:8px;">
+                                <span>🎨 สีธีม (Accent color)</span>
+                                <div class="accent-swatch-row" id="accentSwatchRow"></div>
+                            </div>
+
+                            <div class="settings-divider"></div>
+
+                            <!-- ===== เพิ่มใหม่: ระบบคิดละเอียด (Advanced reasoning) ผูกกับ reasoning_effort จริงของ Groq ===== -->
+                            <div class="settings-row">
+                                <span>🧠 ระบบคิดละเอียด (ตอบช้าลงแต่วิเคราะห์ลึกขึ้น)</span>
+                                <label class="settings-toggle">
+                                    <input type="checkbox" id="deepThinkToggle" onchange="handleDeepThinkChange()">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+
+                            <!-- ===== เพิ่มใหม่: เปิด/ปิดปุ่มพิมพ์ด้วยเสียง (ป้อนตามคำบอก) ===== -->
+                            <div class="settings-row">
+                                <span>🎙️ เปิดใช้การป้อนด้วยเสียง (พูดแทนพิมพ์)</span>
+                                <label class="settings-toggle">
+                                    <input type="checkbox" id="dictationToggle" onchange="handleDictationToggleChange()">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
 
                             <!-- ===== เพิ่มใหม่: ปรับขนาดตัวอักษรในกล่องแชท ใช้งานได้จริง (เปลี่ยนขนาดตัวอักษรทั้งแอปทันที) ===== -->
                             <div class="settings-row">
@@ -894,7 +942,7 @@
 
         // ===== แก้ไข: เอาวันที่/เวลาที่ฝังตายตัว (${today}/${timeNow}) ออกจาก system prompt
         // และเพิ่มกฎข้อ 6 ห้ามทักทายซ้ำทุกข้อความ (เดิมกฎข้อ 1 เขียนกว้างเกินไป โมเดลเลยทักทายทุกครั้งที่ตอบ) =====
-        let chatHistory = [{ role: "system", content: `คุณคือ ETC เลขาสาวผู้ชาญฉลาด เพศหญิง คุณมีความเชี่ยวชาญพิเศษด้านวิทยาศาสตร์และอิเล็กทรอนิกส์ แต่คุณสามารถตอบคำถามทั่วไป ประวัติศาสตร์ หรือเรื่องอื่นๆ ได้อย่างครบถ้วนและสุภาพ | กฎ: 1. ตอบให้ครบถ้วนละเอียด ไม่สั้นห้วนจนเกินไป ถ้าเหมาะสมให้ยกตัวอย่างประกอบหรือแนะนำเรื่องที่เกี่ยวข้องเพิ่มเติมท้ายคำตอบด้วย | 2. ห้ามพูดถึงวันที่/เวลาเองเด็ดขาด ยกเว้นถูกถามตรงๆ ให้ใช้ข้อมูลวันที่/เวลาปัจจุบันที่ระบบแจ้งให้ในข้อความ system ล่าสุดเท่านั้น ห้ามเดาหรือจำวันที่เก่าจากตอนต้นบทสนทนา | 3. วิทยาศาสตร์/อิเล็กทรอนิกส์ตอบเชี่ยวชาญ | 4. ลงท้ายด้วย ค่ะ เสมอ | 5. ห้ามใช้ ครับ ผม เด็ดขาด | 6. ทักทาย (เช่น สวัสดีค่ะ) ได้เฉพาะข้อความแรกสุดของบทสนทนาเท่านั้น ข้อความถัดๆไปห้ามทักทายซ้ำอีก ให้ตอบเข้าประเด็นคำถามได้เลย | 7. ห้ามพูดคำหรือวลีเดิมซ้ำๆวนไปมาเด็ดขาด ถ้าตอบยาวให้เรียบเรียงเนื้อหาใหม่ทุกประโยค ห้ามคัดลอกรูปแบบประโยคเดิมซ้ำ | 8. ตอบเป็นภาษาไทยล้วนเท่านั้นเสมอ ห้ามแทรกคำหรืออักษรภาษาจีน ญี่ปุ่น เกาหลี หรือภาษาอื่นใดที่ไม่ใช่ไทยโดยเด็ดขาด ยกเว้นชื่อเฉพาะที่เป็นสากล (เช่น ชื่อคน ชื่อสถานที่ ชื่อสารเคมี หน่วยวัด หรือศัพท์เทคนิคที่ไม่มีคำแปลไทย) ซึ่งอนุญาตให้ใช้ภาษาอังกฤษได้เท่านั้น ถ้าไม่แน่ใจว่าคำไหนมีคำแปลไทยหรือไม่ ให้เลือกใช้คำไทยไว้ก่อนเสมอ` }];
+        let chatHistory = [{ role: "system", content: `คุณคือ ETC เลขาสาวผู้ชาญฉลาด เพศหญิง คุณมีความเชี่ยวชาญพิเศษด้านวิทยาศาสตร์และอิเล็กทรอนิกส์ แต่คุณสามารถตอบคำถามทั่วไป ประวัติศาสตร์ หรือเรื่องอื่นๆ ได้อย่างครบถ้วนและสุภาพ | กฎ: 1. ตอบให้ครบถ้วนละเอียด ไม่สั้นห้วนจนเกินไป ถ้าเหมาะสมให้ยกตัวอย่างประกอบหรือแนะนำเรื่องที่เกี่ยวข้องเพิ่มเติมท้ายคำตอบด้วย | 2. ห้ามพูดถึงวันที่/เวลาเองเด็ดขาด ยกเว้นถูกถามตรงๆ ให้ใช้ข้อมูลวันที่/เวลาปัจจุบันที่ระบบแจ้งให้ในข้อความ system ล่าสุดเท่านั้น ห้ามเดาหรือจำวันที่เก่าจากตอนต้นบทสนทนา | 3. วิทยาศาสตร์/อิเล็กทรอนิกส์ตอบเชี่ยวชาญ | 4. ลงท้ายด้วย ค่ะ เสมอ | 5. ห้ามใช้ ครับ ผม เด็ดขาด | 6. ทักทาย (เช่น สวัสดีค่ะ) ได้เฉพาะข้อความแรกสุดของบทสนทนาเท่านั้น ข้อความถัดๆไปห้ามทักทายซ้ำอีก ให้ตอบเข้าประเด็นคำถามได้เลย | 7. ห้ามพูดคำหรือวลีเดิมซ้ำๆวนไปมาเด็ดขาด ถ้าตอบยาวให้เรียบเรียงเนื้อหาใหม่ทุกประโยค ห้ามคัดลอกรูปแบบประโยคเดิมซ้ำ | 8. กฎภาษาสำคัญที่สุด: ตอบเป็นภาษาไทยล้วนเป็นหลักเสมอ (ประโยค ไวยากรณ์ คำเชื่อม ต้องเป็นไทยทั้งหมด) ห้ามแทรกคำหรืออักษรภาษาจีน ญี่ปุ่น เกาหลี เวียดนาม หรือภาษาอื่นใดที่ไม่ใช่ไทย/อังกฤษโดยเด็ดขาด ไม่ว่ากรณีใดก็ตาม | อนุญาตให้ใช้คำภาษาอังกฤษได้เฉพาะกรณีต่อไปนี้เท่านั้น: (ก) ชื่อเฉพาะสากล เช่น ชื่อคน ชื่อบริษัท ชื่อโปรแกรม ชื่อสถานที่ (ข) ศัพท์เทคนิคด้านวิทยาศาสตร์/อิเล็กทรอนิกส์/คอมพิวเตอร์ที่ไม่มีคำแปลไทยที่ใช้กันทั่วไป เช่น Wi-Fi, Bluetooth, CPU, transistor, API (ค) หน่วยวัดสากล เช่น V, A, Hz, GB | ถ้าคำไหนมีคำแปลไทยที่ใช้กันทั่วไปอยู่แล้ว ต้องใช้คำไทยเสมอ ห้ามใช้คำอังกฤษแทนโดยไม่จำเป็น เช่น ใช้ "คอมพิวเตอร์" ไม่ใช่ "computer", ใช้ "ตัวอย่างเช่น" ไม่ใช่ "for example" | ก่อนตอบทุกครั้ง ให้ตรวจทานคำตอบของตัวเองว่ามีคำที่ไม่ใช่ไทยหรืออังกฤษหลุดเข้ามาหรือไม่ ถ้ามีให้แก้เป็นภาษาไทยก่อนส่งคำตอบ` }];
 
         // ===== เพิ่มใหม่: ฟังก์ชันคำนวณวันที่/เวลาปัจจุบัน "สดใหม่" ทุกครั้งที่เรียก (ไม่ใช่ค่าคงที่ตอนโหลดหน้า) =====
         function getCurrentDateTimeSystemMessage() {
@@ -1433,6 +1481,105 @@
             } catch(e) {}
         }
 
+        // ============================================================
+        // สีธีม (Accent color) — เปลี่ยนสีปุ่ม/อวตาร์/บับเบิลข้อความทั้งแอปทันที
+        // ============================================================
+        // ===== เพิ่มใหม่: ชุดสีให้เลือก [ชื่อ, สีที่1, สีที่2] =====
+        const ACCENT_PRESETS = [
+            { name: "ม่วง (ค่าเริ่มต้น)", c1: "#a8c7fa", c2: "#9c27b0" },
+            { name: "ฟ้า", c1: "#7dd3fc", c2: "#2563eb" },
+            { name: "ชมพู", c1: "#fda4af", c2: "#db2777" },
+            { name: "เขียว", c1: "#86efac", c2: "#059669" },
+            { name: "ส้ม", c1: "#fdba74", c2: "#ea580c" },
+        ];
+        function renderAccentSwatches() {
+            const row = document.getElementById("accentSwatchRow");
+            if (!row) return;
+            const current = localStorage.getItem("etc_accent1") || ACCENT_PRESETS[0].c1;
+            row.innerHTML = ACCENT_PRESETS.map((p, i) =>
+                `<div class="accent-swatch ${p.c1 === current ? 'active' : ''}" style="background:linear-gradient(135deg,${p.c1},${p.c2});" onclick="setAccentColor(${i})" title="${p.name}"></div>`
+            ).join("");
+        }
+        function setAccentColor(index) {
+            const p = ACCENT_PRESETS[index];
+            document.documentElement.style.setProperty("--accent1", p.c1);
+            document.documentElement.style.setProperty("--accent2", p.c2);
+            try { localStorage.setItem("etc_accent1", p.c1); localStorage.setItem("etc_accent2", p.c2); } catch(e) {}
+            renderAccentSwatches();
+        }
+        function loadAccentColor() {
+            try {
+                const c1 = localStorage.getItem("etc_accent1");
+                const c2 = localStorage.getItem("etc_accent2");
+                if (c1 && c2) {
+                    document.documentElement.style.setProperty("--accent1", c1);
+                    document.documentElement.style.setProperty("--accent2", c2);
+                }
+            } catch(e) {}
+            renderAccentSwatches();
+        }
+
+        // ============================================================
+        // ระบบคิดละเอียด (Advanced reasoning) — ผูกกับ reasoning_effort จริงของ Groq
+        // ============================================================
+        function handleDeepThinkChange() {
+            const enabled = document.getElementById("deepThinkToggle").checked;
+            try { localStorage.setItem("etc_deep_think", enabled); } catch(e) {}
+        }
+        function loadDeepThinkSetting() {
+            try {
+                const saved = localStorage.getItem("etc_deep_think") === "true";
+                const toggle = document.getElementById("deepThinkToggle");
+                if (toggle) toggle.checked = saved;
+            } catch(e) {}
+        }
+
+        // ============================================================
+        // พิมพ์ด้วยเสียง (Dictation) — ใช้ Web Speech Recognition API ของเบราว์เซอร์เอง ฟรี 100%
+        // ============================================================
+        let dictationRecognition = null;
+        let isDictating = false;
+
+        function handleDictationToggleChange() {
+            const enabled = document.getElementById("dictationToggle").checked;
+            try { localStorage.setItem("etc_dictation_enabled", enabled); } catch(e) {}
+            document.getElementById("micBtn").style.display = enabled ? "flex" : "none";
+        }
+        function loadDictationSetting() {
+            try {
+                const saved = localStorage.getItem("etc_dictation_enabled") === "true";
+                const toggle = document.getElementById("dictationToggle");
+                if (toggle) toggle.checked = saved;
+                document.getElementById("micBtn").style.display = saved ? "flex" : "none";
+            } catch(e) {}
+        }
+        // ===== เพิ่มใหม่: เริ่ม/หยุดฟังเสียงพูดแล้วแปลงเป็นข้อความใส่ในช่องพิมพ์ให้อัตโนมัติ =====
+        function toggleDictation() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) { alert("ขออภัยค่ะ เบราว์เซอร์นี้ไม่รองรับการพิมพ์ด้วยเสียง ลองเปิดผ่าน Chrome ดูนะคะ"); return; }
+            const micBtn = document.getElementById("micBtn");
+
+            if (isDictating) {
+                dictationRecognition.stop();
+                return;
+            }
+            dictationRecognition = new SpeechRecognition();
+            dictationRecognition.lang = "th-TH";
+            dictationRecognition.interimResults = false;
+            dictationRecognition.maxAlternatives = 1;
+
+            dictationRecognition.onstart = () => { isDictating = true; micBtn.textContent = "⏺️"; micBtn.style.color = "#ff6b9d"; };
+            dictationRecognition.onend = () => { isDictating = false; micBtn.textContent = "🎙️"; micBtn.style.color = "var(--accent1, #a8c7fa)"; };
+            dictationRecognition.onerror = (e) => {
+                if (e.error !== "no-speech" && e.error !== "aborted") alert("ฟังเสียงไม่สำเร็จค่ะ ลองใหม่อีกครั้ง (" + e.error + ")");
+            };
+            dictationRecognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                document.getElementById("userInputText").value = transcript;
+            };
+            dictationRecognition.start();
+        }
+
         // ===== เพิ่มใหม่: เปิด/ปิด sidebar ซ้ายบนมือถือ (กดปุ่ม ☰) =====
         function toggleSidebar() {
             const sidebar = document.getElementById("iconSidebar");
@@ -1461,6 +1608,63 @@
             return base;
         }
 
+        // ============================================================
+        // แนบรูปภาพให้ AI ดู (Vision) — ใช้โมเดล qwen3.6-27b ที่รองรับภาพอยู่แล้ว ไม่ต้องเปลี่ยนโมเดล
+        // ============================================================
+        let attachedImageBase64 = null; // เก็บรูปที่เลือกไว้รอส่ง (เป็น data URL base64)
+
+        function handleImageAttach(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            if (file.size > 15 * 1024 * 1024) { alert("ไฟล์รูปใหญ่เกินไปค่ะ (จำกัด 15MB)"); return; }
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                attachedImageBase64 = e.target.result;
+                document.getElementById("imagePreviewThumb").src = attachedImageBase64;
+                document.getElementById("imagePreviewBox").style.display = "block";
+            };
+            reader.readAsDataURL(file);
+        }
+        function clearImageAttachment() {
+            attachedImageBase64 = null;
+            document.getElementById("imagePreviewBox").style.display = "none";
+            document.getElementById("imageFileInput").value = "";
+        }
+
+        // ============================================================
+        // สร้างภาพ (Image generation) — ใช้ Pollinations.ai ฟรี ไม่ต้องมี API key
+        // ============================================================
+        // ===== เพิ่มใหม่: เช็คว่าข้อความที่พิมพ์เป็นคำสั่งขอให้ "วาดรูป/สร้างภาพ" หรือไม่ =====
+        function detectImageGenRequest(text) {
+            const kw = ["วาดรูป", "วาดภาพ", "สร้างภาพ", "สร้างรูป", "เจนรูป", "เจนภาพ", "แต่งรูป", "generate image", "draw a picture", "draw an image"];
+            return kw.some(k => text.toLowerCase().includes(k));
+        }
+        // ===== เพิ่มใหม่: ดึงคำสั่งวาดรูปออกมาเป็น prompt ล้วนๆ (ตัดคำนำหน้าอย่าง "วาดรูป" ออก) =====
+        function extractImagePrompt(text) {
+            let prompt = text;
+            const kw = ["วาดรูป", "วาดภาพ", "สร้างภาพ", "สร้างรูป", "เจนรูป", "เจนภาพ", "แต่งรูป", "ให้ฉันดูหน่อย", "ให้หน่อย", "หน่อยค่ะ", "หน่อย"];
+            kw.forEach(k => { prompt = prompt.replace(new RegExp(k, "gi"), ""); });
+            return prompt.trim() || text;
+        }
+        // ===== เพิ่มใหม่: เรียก Pollinations.ai สร้างภาพจาก prompt (ไม่ต้องมี API key, ฟรี) =====
+        async function generateImage(prompt) {
+            const cw = document.getElementById("chatWindow");
+            const botId = 'bot-img-' + Date.now();
+            cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-bot"><img src="img/ETC.png" class="avatar-img" onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('avatar-fallback');this.innerText='ETC';"><div class="chat-bubble" id="${botId}">🎨 ETC กำลังวาดภาพให้ค่ะ รอสักครู่นะคะ...</div></div>`);
+            cw.scrollTop = cw.scrollHeight;
+            try {
+                // สร้าง URL ของ Pollinations.ai แบบไม่ต้องใช้ API key เลย (ฟรี 100%)
+                const seed = Math.floor(Math.random() * 100000); // เพิ่ม seed สุ่ม กันได้ภาพซ้ำเดิมทุกครั้งที่ใช้ prompt เดียวกัน
+                const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=768&height=768&seed=${seed}&nologo=true`;
+                document.getElementById(botId).innerHTML =
+                    `<img src="${imgUrl}" style="max-width:100%; border-radius:12px; display:block;" onerror="this.parentElement.textContent='ขออภัยค่ะ สร้างภาพไม่สำเร็จ ลองใหม่อีกครั้งนะคะ';" onload="document.getElementById('chatWindow').scrollTop = document.getElementById('chatWindow').scrollHeight;">`;
+                chatHistory.push({ role:"assistant", content:`[ETC วาดภาพให้ตาม prompt: "${prompt}"]` });
+                await saveMessageToFirestore(`วาดรูป: ${prompt}`, `[ภาพที่วาดให้]`);
+            } catch(e) {
+                document.getElementById(botId).textContent = "ขออภัยค่ะ สร้างภาพไม่สำเร็จ: " + e.message;
+            }
+        }
+
         function handleSendAction() {
             const input = document.getElementById("userInputText");
             const btn = document.getElementById("actionBtn");
@@ -1468,37 +1672,66 @@
                 if (currentController) currentController.abort();
                 isAiThinking = false; btn.innerText = "➔"; btn.style.color = "#a8c7fa"; return;
             }
-            if (!input.value.trim()) return;
+            // ===== แก้ไข: อนุญาตให้ส่งได้ถ้ามีรูปแนบอยู่ แม้ไม่ได้พิมพ์ข้อความก็ตาม =====
+            if (!input.value.trim() && !attachedImageBase64) return;
             if (isFirstMessage) {
                 document.getElementById("welcomeContainer").classList.add("fade-out-up");
                 document.getElementById("inputWrapper").classList.add("is-chatting-input");
                 document.getElementById("heroSection").classList.add("chat-active");
                 isFirstMessage = false;
             }
-            const text = input.value.trim();
-            chatHistory.push({ role:"user", content:text });
-            executeMessageSend(text);
+            const text = input.value.trim() || "อธิบายรูปนี้ให้ฟังหน่อยค่ะ";
             input.value = "";
+
+            // ===== เพิ่มใหม่: ถ้าเป็นคำสั่งขอให้วาดรูป ให้ไปทางสร้างภาพแทนการคุยปกติ (ไม่ต้องมีรูปแนบมาด้วย) =====
+            if (!attachedImageBase64 && detectImageGenRequest(text)) {
+                const cw = document.getElementById("chatWindow");
+                cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-user"><div class="chat-bubble">${text}</div></div>`);
+                cw.scrollTop = cw.scrollHeight;
+                generateImage(extractImagePrompt(text));
+                return;
+            }
+
+            executeMessageSend(text, attachedImageBase64);
+            clearImageAttachment();
         }
 
-        async function executeMessageSend(text) {
+        async function executeMessageSend(text, imageBase64) {
             const cw = document.getElementById("chatWindow");
             const btn = document.getElementById("actionBtn");
             isAiThinking = true; btn.innerText = "■"; btn.style.color = "#ff6b9d";
             currentController = new AbortController();
             const av = userProfile.avatarDataUrl ? `<div class="avatar-user" style="background-image:url(${userProfile.avatarDataUrl});background-size:cover;background-position:center;"></div>` : `<div class="avatar-user">${userProfile.name ? userProfile.name.substring(0,2).toUpperCase() : "ME"}</div>`;
-            cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-user"><div class="chat-bubble">${text}</div>${av}</div>`);
+            // ===== เพิ่มใหม่: ถ้ามีรูปแนบมา ให้โชว์รูปเล็กๆในบับเบิลข้อความของผู้ใช้ด้วย =====
+            const imgHtml = imageBase64 ? `<img src="${imageBase64}" style="max-width:200px; border-radius:10px; display:block; margin-bottom:6px;">` : "";
+            cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-user"><div class="chat-bubble">${imgHtml}${text}</div>${av}</div>`);
             const botId = 'bot-' + Date.now();
             cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-bot"><img src="img/ETC.png" class="avatar-img" onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('avatar-fallback');this.innerText='ETC';"><div class="chat-bubble" id="${botId}">ETC กำลังคิด...</div></div>`);
+            cw.scrollTop = cw.scrollHeight;
+
+            // ===== เพิ่มใหม่: ถ้ามีรูปแนบมา ให้สร้าง message แบบ multimodal (ข้อความ+รูป) ตามฟอร์แมตที่ Groq ต้องการ
+            // ไม่ใช้ chatHistory ที่เป็น string ล้วนแบบเดิม เพราะโมเดล vision ต้องการ content เป็น array ของ [text, image_url] =====
+            const userMessageForAPI = imageBase64
+                ? { role: "user", content: [ { type: "text", text: text }, { type: "image_url", image_url: { url: imageBase64 } } ] }
+                : { role: "user", content: text };
+
+            // เก็บ chatHistory ไว้เป็นข้อความล้วน (ไม่เก็บรูปถาวร กันประวัติแชทบวมเกินไปและกัน error ตอนคุยยาวๆ)
+            chatHistory.push({ role: "user", content: imageBase64 ? `[ผู้ใช้ส่งรูปมาพร้อมข้อความ] ${text}` : text });
+
             try {
-                // ===== แก้ไข: เปลี่ยนจากยิงตรงไป ngrok/LM Studio เป็นยิงไปที่ /api/chat ของเราเอง =====
-                // ===== /api/chat จะเป็นคนแนบ Groq API key (ที่ซ่อนไว้บนเซิร์ฟเวอร์) แล้วส่งต่อให้ Groq อีกที =====
-                // ===== ไม่ต้องส่ง model หรือ Authorization จากฝั่งนี้แล้ว เพราะกำหนดไว้ในไฟล์ api/chat.js แทน =====
+                const messagesToSend = imageBase64
+                    ? [...buildRequestMessages().slice(0, -1), userMessageForAPI] // แทนที่ข้อความล่าสุดด้วยเวอร์ชันที่มีรูปติดไปด้วย
+                    : buildRequestMessages();
+
                 const res = await fetch("/api/chat", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     signal: currentController.signal,
-                    body: JSON.stringify({ messages: buildRequestMessages(), temperature: getTemperatureForText(text) })
+                    body: JSON.stringify({
+                        messages: messagesToSend,
+                        temperature: getTemperatureForText(text),
+                        deepThinking: localStorage.getItem("etc_deep_think") === "true"
+                    })
                 });
 
                 // ===== เพิ่มใหม่: เช็ค error ก่อนอ่าน stream เผื่อ Groq ตอบ error (เช่น key ผิด, โมเดลถูกยุบ) =====
@@ -1551,6 +1784,9 @@
         loadVoiceRateSetting();
         loadFontSizeSetting();
         loadCreativitySetting();
+        loadAccentColor();
+        loadDeepThinkSetting();
+        loadDictationSetting();
         loadAvailableVoices(); // เผื่อบางเบราว์เซอร์โหลดรายชื่อเสียงพร้อมใช้ทันทีโดยไม่ต้องรอ event voiceschanged
     </script>
 </body>

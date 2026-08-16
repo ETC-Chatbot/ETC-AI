@@ -29,12 +29,23 @@ export default async function handler(req) {
   }
 
   try {
-    // ดึง messages (ประวัติแชท) และ temperature ที่หน้าเว็บส่งมา
-    const { messages, temperature } = await req.json();
+    // ดึง messages (ประวัติแชท), temperature, และค่าสวิตช์ "ระบบคิดละเอียด" ที่หน้าเว็บส่งมา
+    const { messages, temperature, deepThinking } = await req.json();
 
     if (!messages || !Array.isArray(messages)) {
       return new Response(JSON.stringify({ error: "ไม่พบข้อมูล messages" }), {
         status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // ===== เพิ่มใหม่: qwen3.6-27b รองรับการดูภาพได้ในตัว (multimodal) โดยไม่ต้องเปลี่ยนโมเดล
+    // หน้าเว็บจะส่ง content เป็น array [{type:"text",...}, {type:"image_url",...}] มาแทน string ธรรมดา เมื่อผู้ใช้แนบรูป
+    // Groq จำกัดขนาดรูปไว้ที่ 20MB ต่อคำขอ เผื่อไว้ที่ 18MB กันพลาดเรื่อง overhead ของ base64 encoding =====
+    const payloadSize = JSON.stringify(messages).length;
+    if (payloadSize > 18 * 1024 * 1024) {
+      return new Response(JSON.stringify({ error: "ไฟล์รูปภาพใหญ่เกินไปค่ะ กรุณาเลือกรูปที่เล็กกว่านี้" }), {
+        status: 413,
         headers: { "Content-Type": "application/json" },
       });
     }
@@ -57,10 +68,10 @@ export default async function handler(req) {
         // ถ้าไม่ตั้งค่านี้ ขั้นตอนความคิดทั้งหมด (thinking process) จะปนมาในคำตอบด้วย
         // ตั้งเป็น "hidden" เพื่อให้ Groq ซ่อนส่วนคิด ส่งกลับมาแค่คำตอบสุดท้ายที่สมบูรณ์
         reasoning_format: "hidden",
-        // ===== เพิ่มใหม่: ปิดโหมด "คิดลึก" (thinking mode) ไปเลย เพราะ ETC เป็นบอทสนทนาทั่วไป ไม่ใช่บอทแก้โจทย์คณิตศาสตร์/โค้ดซับซ้อน
-        // ถ้าเปิดโหมดคิดลึกไว้ (ค่าเริ่มต้น) โมเดลจะใช้เวลาคิดนานมากก่อนเริ่มตอบ แม้จะซ่อนไม่ให้เห็นก็ตาม ทำให้รู้สึกว่าตอบช้า
-        // ตั้งเป็น "none" จะได้คำตอบเร็วขึ้นมาก เหมาะกับแชทพูดคุยทั่วไป
-        reasoning_effort: "none",
+        // ===== แก้ไข: ผูกกับสวิตช์ "ระบบคิดละเอียด" ในหน้าตั้งค่าจริงๆ แทนที่จะปิดตายตัวเสมอ
+        // ถ้าผู้ใช้เปิดสวิตช์ไว้ (deepThinking===true) ให้เปิดโหมดคิดลึกของโมเดล (ตอบช้าลงแต่วิเคราะห์ละเอียดขึ้น)
+        // ถ้าไม่เปิด (ค่าเริ่มต้น) ให้ปิดโหมดคิดลึกไว้เหมือนเดิม เพื่อความเร็วในการสนทนาทั่วไป =====
+        reasoning_effort: deepThinking === true ? "default" : "none",
         // ===== เพิ่มใหม่: ค่าที่ผู้ผลิตโมเดล (Qwen) แนะนำเฉพาะตอนปิดโหมดคิดลึก (non-thinking mode)
         // presence_penalty=1.5 ช่วยป้องกันปัญหาโมเดล "พูดวนซ้ำคำเดิมไม่จบ" (เช่นกรณีท่องชื่อซ้ำๆไม่หยุด)
         // top_p=0.8 ช่วยให้คำตอบสมเหตุสมผล ไม่กระโดดหัวข้อ =====
