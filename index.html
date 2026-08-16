@@ -122,7 +122,11 @@
         .row-bot { justify-content: flex-start; }
         .row-user { justify-content: flex-end; }
         /* ===== แก้ไข: เปลี่ยนสีพื้นหลังบับเบิลจากเทาเข้มล้วน เป็นโทนม่วง-น้ำเงินเข้ม ให้กลืนกับธีมพื้นหลังจักรวาล ===== */
-        .chat-bubble { width: fit-content; max-width: 80%; font-size: var(--chat-font-size, 16px); padding: 10px 16px; border-radius: 18px; background: rgba(38, 26, 64, 0.75); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(168, 199, 250, 0.15); color: #fff; }
+        .chat-bubble { width: fit-content; max-width: 80%; font-size: var(--chat-font-size, 16px); padding: 10px 16px; border-radius: 18px; background: rgba(38, 26, 64, 0.75); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(168, 199, 250, 0.15); color: #fff; overflow-wrap: anywhere; word-break: break-word; }
+        /* ===== เพิ่มใหม่ (แก้บั๊ก): เดิมโค้ดยาวๆ (เช่น code block จาก AI) ทะลุขอบกล่องแชทออกไปทั้งแนวนอน ต้องบังคับให้ <pre>/<code> ตัดบรรทัดและ scroll แนวนอนแค่ในกรอบตัวเองเท่านั้น ไม่ดันขอบกล่องแชทให้กว้างเกิน ===== */
+        .chat-bubble pre { max-width: 100%; overflow-x: auto; white-space: pre; box-sizing: border-box; background: rgba(0,0,0,0.3); border-radius: 8px; padding: 10px; }
+        .chat-bubble code { word-break: break-word; white-space: pre-wrap; }
+        .chat-bubble pre code { white-space: pre; word-break: normal; }
         .row-user .chat-bubble { background-color: var(--accent2, rgba(98, 0, 234, 0.7)); }
         .avatar-user { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; background-color: #9c27b0; color: white; }
         .avatar-img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
@@ -1646,18 +1650,41 @@
             kw.forEach(k => { prompt = prompt.replace(new RegExp(k, "gi"), ""); });
             return prompt.trim() || text;
         }
-        // ===== เพิ่มใหม่: เรียก Pollinations.ai สร้างภาพจาก prompt (ไม่ต้องมี API key, ฟรี) =====
+        // ===== เพิ่มใหม่: ตัวกรองคำต้องห้ามขั้นพื้นฐาน กันไม่ให้ส่ง prompt ที่ชัดเจนว่าเสี่ยงไปสร้างภาพเลยตั้งแต่ต้น =====
+        function containsUnsafeKeywords(text) {
+            const blocked = ["โป๊", "เปลือย", "sexy", "nude", "naked", "nsfw", "explicit", "18+", "เซ็กซี่", "ยั่วยวน", "ชุดชั้นใน", "underwear", "bikini ยั่ว"];
+            const lower = text.toLowerCase();
+            return blocked.some(k => lower.includes(k.toLowerCase()));
+        }
+
+        // ===== เพิ่มใหม่: เรียก Pollinations.ai สร้างภาพจาก prompt (ไม่ต้องมี API key, ฟรี)
+        // ===== แก้ไข (สำคัญมาก): เพิ่มตัวกรองความปลอดภัย 2 ชั้น เพราะพบว่าโมเดลเริ่มต้นของ Pollinations.ai
+        // มีบั๊กที่รู้จักกันว่าบางครั้งสร้างภาพไม่เหมาะสมออกมาได้แม้ prompt จะเป็นคำธรรมดาไม่มีคำเสี่ยงเลย (เช่น "สร้างภาพโลโก้")
+        // ชั้นที่ 1: เช็คคำต้องห้ามในข้อความก่อนส่งไปเลย (containsUnsafeKeywords)
+        // ชั้นที่ 2: เติมพารามิเตอร์ safe=true ของ Pollinations เอง ซึ่งเป็นระบบตรวจสอบเนื้อหาด้วย AI ก่อนส่งภาพกลับมา
+        // และเสริมคำ safety ต่อท้าย prompt เพื่อ "โน้มน้าว" โมเดลให้สร้างภาพที่เหมาะสมตั้งแต่แรก =====
         async function generateImage(prompt) {
             const cw = document.getElementById("chatWindow");
             const botId = 'bot-img-' + Date.now();
+
+            // ===== เพิ่มใหม่: เช็คคำต้องห้ามก่อน ถ้าเจอให้ปฏิเสธทันทีไม่ส่งไปสร้างภาพเลย =====
+            if (containsUnsafeKeywords(prompt)) {
+                cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-bot"><img src="img/ETC.png" class="avatar-img" onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('avatar-fallback');this.innerText='ETC';"><div class="chat-bubble">ขออภัยค่ะ ETC ไม่สามารถสร้างภาพประเภทนี้ให้ได้ค่ะ กรุณาขอภาพที่เหมาะสมนะคะ</div></div>`);
+                cw.scrollTop = cw.scrollHeight;
+                return;
+            }
+
             cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-bot"><img src="img/ETC.png" class="avatar-img" onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('avatar-fallback');this.innerText='ETC';"><div class="chat-bubble" id="${botId}">🎨 ETC กำลังวาดภาพให้ค่ะ รอสักครู่นะคะ...</div></div>`);
             cw.scrollTop = cw.scrollHeight;
             try {
-                // สร้าง URL ของ Pollinations.ai แบบไม่ต้องใช้ API key เลย (ฟรี 100%)
                 const seed = Math.floor(Math.random() * 100000); // เพิ่ม seed สุ่ม กันได้ภาพซ้ำเดิมทุกครั้งที่ใช้ prompt เดียวกัน
-                const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=768&height=768&seed=${seed}&nologo=true`;
+                // ===== เพิ่มใหม่: เสริมคำท้าย prompt เพื่อโน้มน้าวให้โมเดลสร้างภาพที่เหมาะสม (safety wrapper) =====
+                const safePrompt = `${prompt}, appropriate, family-friendly, fully clothed, safe for work`;
+                // ===== เพิ่มใหม่: &safe=true คือตัวกรอง NSFW อย่างเป็นทางการของ Pollinations.ai
+                // ถ้าตรวจพบเนื้อหาไม่เหมาะสม API จะตอบ error กลับมาแทนที่จะส่งภาพให้ =====
+                const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(safePrompt)}?width=768&height=768&seed=${seed}&nologo=true&safe=true`;
                 document.getElementById(botId).innerHTML =
-                    `<img src="${imgUrl}" style="max-width:100%; border-radius:12px; display:block;" onerror="this.parentElement.textContent='ขออภัยค่ะ สร้างภาพไม่สำเร็จ ลองใหม่อีกครั้งนะคะ';" onload="document.getElementById('chatWindow').scrollTop = document.getElementById('chatWindow').scrollHeight;">`;
+                    `<img src="${imgUrl}" style="max-width:100%; border-radius:12px; display:block;" onerror="this.parentElement.textContent='ขออภัยค่ะ สร้างภาพไม่สำเร็จ (อาจเป็นเพราะเนื้อหาไม่เหมาะสม หรือระบบขัดข้องชั่วคราว) ลองใหม่ด้วยคำสั่งอื่นนะคะ';" onload="document.getElementById('chatWindow').scrollTop = document.getElementById('chatWindow').scrollHeight;">`;
                 chatHistory.push({ role:"assistant", content:`[ETC วาดภาพให้ตาม prompt: "${prompt}"]` });
                 await saveMessageToFirestore(`วาดรูป: ${prompt}`, `[ภาพที่วาดให้]`);
             } catch(e) {
