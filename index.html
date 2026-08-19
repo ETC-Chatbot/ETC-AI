@@ -76,7 +76,11 @@
         
         /* ===== แก้ไข: เปลี่ยน top จาก 0 เป็น 70px เว้นพื้นที่ให้แถบปุ่มอัปเกรดด้านบน ไม่ให้ข้อความแชทไปทับ/ขึ้นระดับเดียวกับปุ่ม ===== */
         /* ===== แก้ไข: เพิ่มระยะ top จาก 70px เป็น 90px ให้ข้อความแชทเริ่มต่ำกว่าแถบ header/ปุ่มอัปเกรดมากขึ้น ===== */
-        .chat-view { position: absolute; top: 90px; left: 0; right: 0; bottom: 100px; overflow-y: auto !important; -webkit-overflow-scrolling: touch; padding: 20px; display: flex; flex-direction: column; gap: 15px; max-width: 600px; width: 50%; margin-left: auto; margin-right: auto; box-sizing: border-box; scroll-behavior: smooth; z-index: 2; transition: all 0.5s ease; }
+        /* ===== แก้ไข (บั๊ก): เอา scroll-behavior:smooth ออก เพราะเดิมทำให้จอ "เด้ง" กระตุกตลอดเวลาที่ AI กำลังตอบยาวๆ
+           สาเหตุ: ระหว่าง streaming คำตอบ โค้ดจะสั่งเลื่อนจอ (cw.scrollTop = cw.scrollHeight) ทุกครั้งที่มีคำใหม่มา (หลายสิบครั้งต่อวินาที)
+           พอตั้ง smooth ไว้ แต่ละครั้งจะพยายามเล่น animation เลื่อนจอนุ่มนวลซ้อนทับกันเรื่อยๆ ทำให้จอดูกระตุกเด้งไปมาแทนที่จะเลื่อนลื่นๆ
+           เปลี่ยนเป็นเลื่อนทันที (auto) ระหว่างพิมพ์ตอบแทน ลื่นกว่ามากสำหรับกรณีนี้โดยเฉพาะ ===== */
+        .chat-view { position: absolute; top: 90px; left: 0; right: 0; bottom: 100px; overflow-y: auto !important; -webkit-overflow-scrolling: touch; padding: 20px; display: flex; flex-direction: column; gap: 15px; max-width: 600px; width: 50%; margin-left: auto; margin-right: auto; box-sizing: border-box; z-index: 2; transition: all 0.5s ease; }
         /* ===== เพิ่มใหม่: บนจอมือถือ (แคบกว่า 768px) ให้กล่องแชทกว้างเต็มจอแทน 50% ตายตัว (เดิมทำให้ข้อความบีบแคบเป็นแถบแคบๆตรงกลางจอ) ===== */
         @media (max-width: 768px) {
             .chat-view { width: 100%; max-width: 100%; top: 70px; bottom: 90px; padding: 14px; }
@@ -115,8 +119,15 @@
         
         /* ===== แก้ไข: เปลี่ยนสีพื้นหลังจากเทาเข้มล้วน เป็นโทนม่วง-น้ำเงินเข้มให้กลืนกับพื้นหลังจักรวาล ปรับสีขอบและเงาให้เข้าธีมเดียวกัน ===== */
         .gemini-input-box { width: 100%; max-width: 760px; background-color: rgba(38, 26, 64, 0.75); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-radius: 32px; padding: 8px 20px; display: flex; align-items: center; border: 1px solid rgba(168, 199, 250, 0.2); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7), 0 4px 12px rgba(20, 10, 40, 0.6), 0 0 30px rgba(156, 39, 176, 0.2); }
-        .gemini-input-box input { flex: 1; background: transparent; border: none; outline: none; color: #e3e3e3; font-size: 16px; padding: 12px 6px; }
-        .send-arrow-btn { background: transparent; color: var(--accent1, #a8c7fa); border: none; cursor: pointer; font-size: 18px; padding: 10px; }
+        .gemini-input-box input { flex: 1; min-width: 0; background: transparent; border: none; outline: none; color: #e3e3e3; font-size: 16px; padding: 12px 6px; }
+        /* ===== แก้ไข: เพิ่ม flex-shrink:0 กันปุ่ม (กล้อง/ไมค์/ส่ง) ถูกบีบเล็กลงเวลาช่องพิมพ์ขยายเต็มพื้นที่บนจอแคบ ===== */
+        .send-arrow-btn { background: transparent; color: var(--accent1, #a8c7fa); border: none; cursor: pointer; font-size: 18px; padding: 10px; flex-shrink: 0; }
+        /* ===== เพิ่มใหม่: บนจอมือถือแคบมาก (≤400px) ลด padding ของกล่องพิมพ์และปุ่มลงเล็กน้อย กันปุ่มหลายตัว (กล้อง/ไมค์/ส่ง) รวมกับช่องพิมพ์แน่นเกินไปจนพิมพ์ยาก ===== */
+        @media (max-width: 400px) {
+            .gemini-input-box { padding: 6px 10px; }
+            .send-arrow-btn { padding: 8px 6px; font-size: 17px; }
+            .gemini-input-box input { padding: 12px 2px; }
+        }
         
         .chat-row { width: 100%; display: flex; align-items: flex-end; gap: 12px; }
         .row-bot { justify-content: flex-start; }
@@ -706,7 +717,7 @@
                     <input type="file" id="imageFileInput" accept="image/*" style="display:none" onchange="handleImageAttach(event)">
                     <button class="send-arrow-btn" onclick="document.getElementById('imageFileInput').click()" title="แนบรูปภาพให้ ETC ดู">📷</button>
                     <!-- ===== แก้ไข: เพิ่ม autocomplete="off" และ name แบบสุ่ม เพื่อปิดการจำคำที่เคยพิมพ์ของเบราว์เซอร์ (popup "Saved info") ===== -->
-                    <input type="text" id="userInputText" name="etc-chat-input-no-save" autocomplete="off" placeholder="พิมพ์ข้อความ หรือลองพูด 'วาดรูป...' ค่ะ" onkeypress="if(event.key==='Enter') handleSendAction()">
+                    <input type="text" id="userInputText" name="etc-chat-input-no-save" autocomplete="off" placeholder="พิมพ์ข้อความที่นี่..." onkeypress="if(event.key==='Enter') handleSendAction()">
                     <!-- ===== เพิ่มใหม่: ปุ่มไมโครโฟนพิมพ์ด้วยเสียง ซ่อนไว้เป็นค่าเริ่มต้น (โชว์เมื่อเปิดสวิตช์ในหน้าตั้งค่า) ===== -->
                     <button class="send-arrow-btn" id="micBtn" onclick="toggleDictation()" style="display:none;" title="พูดแทนพิมพ์">🎙️</button>
                     <button class="send-arrow-btn" id="actionBtn" onclick="handleSendAction()">➔</button>
@@ -1636,60 +1647,22 @@
         }
 
         // ============================================================
-        // สร้างภาพ (Image generation) — ใช้ Pollinations.ai ฟรี ไม่ต้องมี API key
+        // สร้างภาพ (Image generation) — ปิดใช้งานถาวร
         // ============================================================
-        // ===== เพิ่มใหม่: เช็คว่าข้อความที่พิมพ์เป็นคำสั่งขอให้ "วาดรูป/สร้างภาพ" หรือไม่ =====
+        // ===== แก้ไข (สำคัญมาก - ปิดฟีเจอร์): เดิมใช้ Pollinations.ai สร้างภาพฟรี แต่พบว่าโมเดลเริ่มต้นของเขา
+        // สร้างภาพไม่เหมาะสม (เนื้อหาทางเพศ) ออกมาได้ซ้ำหลายครั้ง แม้จะเพิ่มตัวกรอง safe=true, คำต้องห้าม, และ safety prompt
+        // wrapper แล้วก็ตาม ยังหลุดผ่านได้อยู่ดี เนื่องจากเว็บนี้เป็นเว็บสาธารณะที่ใครก็เข้าถึงได้ (รวมถึงอาจมีผู้เยาว์)
+        // จึงตัดสินใจปิดฟีเจอร์นี้ไปเลย ไม่คุ้มความเสี่ยง แทนที่ด้วยข้อความแจ้งเตือนสุภาพแทน
+        // หากในอนาคตต้องการเปิดใช้ใหม่ ควรเปลี่ยนไปใช้บริการที่มีระบบตรวจสอบเนื้อหาที่เชื่อถือได้จริง (เช่น mattpaid API
+        // ที่มี content moderation รับประกัน) แทน Pollinations.ai ที่เป็นบริการฟรีไม่มี SLA รับประกันความปลอดภัย =====
         function detectImageGenRequest(text) {
             const kw = ["วาดรูป", "วาดภาพ", "สร้างภาพ", "สร้างรูป", "เจนรูป", "เจนภาพ", "แต่งรูป", "generate image", "draw a picture", "draw an image"];
             return kw.some(k => text.toLowerCase().includes(k));
         }
-        // ===== เพิ่มใหม่: ดึงคำสั่งวาดรูปออกมาเป็น prompt ล้วนๆ (ตัดคำนำหน้าอย่าง "วาดรูป" ออก) =====
-        function extractImagePrompt(text) {
-            let prompt = text;
-            const kw = ["วาดรูป", "วาดภาพ", "สร้างภาพ", "สร้างรูป", "เจนรูป", "เจนภาพ", "แต่งรูป", "ให้ฉันดูหน่อย", "ให้หน่อย", "หน่อยค่ะ", "หน่อย"];
-            kw.forEach(k => { prompt = prompt.replace(new RegExp(k, "gi"), ""); });
-            return prompt.trim() || text;
-        }
-        // ===== เพิ่มใหม่: ตัวกรองคำต้องห้ามขั้นพื้นฐาน กันไม่ให้ส่ง prompt ที่ชัดเจนว่าเสี่ยงไปสร้างภาพเลยตั้งแต่ต้น =====
-        function containsUnsafeKeywords(text) {
-            const blocked = ["โป๊", "เปลือย", "sexy", "nude", "naked", "nsfw", "explicit", "18+", "เซ็กซี่", "ยั่วยวน", "ชุดชั้นใน", "underwear", "bikini ยั่ว"];
-            const lower = text.toLowerCase();
-            return blocked.some(k => lower.includes(k.toLowerCase()));
-        }
-
-        // ===== เพิ่มใหม่: เรียก Pollinations.ai สร้างภาพจาก prompt (ไม่ต้องมี API key, ฟรี)
-        // ===== แก้ไข (สำคัญมาก): เพิ่มตัวกรองความปลอดภัย 2 ชั้น เพราะพบว่าโมเดลเริ่มต้นของ Pollinations.ai
-        // มีบั๊กที่รู้จักกันว่าบางครั้งสร้างภาพไม่เหมาะสมออกมาได้แม้ prompt จะเป็นคำธรรมดาไม่มีคำเสี่ยงเลย (เช่น "สร้างภาพโลโก้")
-        // ชั้นที่ 1: เช็คคำต้องห้ามในข้อความก่อนส่งไปเลย (containsUnsafeKeywords)
-        // ชั้นที่ 2: เติมพารามิเตอร์ safe=true ของ Pollinations เอง ซึ่งเป็นระบบตรวจสอบเนื้อหาด้วย AI ก่อนส่งภาพกลับมา
-        // และเสริมคำ safety ต่อท้าย prompt เพื่อ "โน้มน้าว" โมเดลให้สร้างภาพที่เหมาะสมตั้งแต่แรก =====
-        async function generateImage(prompt) {
+        function showImageGenDisabledMessage() {
             const cw = document.getElementById("chatWindow");
-            const botId = 'bot-img-' + Date.now();
-
-            // ===== เพิ่มใหม่: เช็คคำต้องห้ามก่อน ถ้าเจอให้ปฏิเสธทันทีไม่ส่งไปสร้างภาพเลย =====
-            if (containsUnsafeKeywords(prompt)) {
-                cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-bot"><img src="img/ETC.png" class="avatar-img" onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('avatar-fallback');this.innerText='ETC';"><div class="chat-bubble">ขออภัยค่ะ ETC ไม่สามารถสร้างภาพประเภทนี้ให้ได้ค่ะ กรุณาขอภาพที่เหมาะสมนะคะ</div></div>`);
-                cw.scrollTop = cw.scrollHeight;
-                return;
-            }
-
-            cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-bot"><img src="img/ETC.png" class="avatar-img" onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('avatar-fallback');this.innerText='ETC';"><div class="chat-bubble" id="${botId}">🎨 ETC กำลังวาดภาพให้ค่ะ รอสักครู่นะคะ...</div></div>`);
+            cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-bot"><img src="img/ETC.png" class="avatar-img" onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('avatar-fallback');this.innerText='ETC';"><div class="chat-bubble">ขออภัยค่ะ ตอนนี้ ETC ยังไม่รองรับการสร้างภาพนะคะ แต่ยินดีช่วยตอบคำถามหรือวิเคราะห์รูปภาพที่คุณส่งมาให้ค่ะ 😊</div></div>`);
             cw.scrollTop = cw.scrollHeight;
-            try {
-                const seed = Math.floor(Math.random() * 100000); // เพิ่ม seed สุ่ม กันได้ภาพซ้ำเดิมทุกครั้งที่ใช้ prompt เดียวกัน
-                // ===== เพิ่มใหม่: เสริมคำท้าย prompt เพื่อโน้มน้าวให้โมเดลสร้างภาพที่เหมาะสม (safety wrapper) =====
-                const safePrompt = `${prompt}, appropriate, family-friendly, fully clothed, safe for work`;
-                // ===== เพิ่มใหม่: &safe=true คือตัวกรอง NSFW อย่างเป็นทางการของ Pollinations.ai
-                // ถ้าตรวจพบเนื้อหาไม่เหมาะสม API จะตอบ error กลับมาแทนที่จะส่งภาพให้ =====
-                const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(safePrompt)}?width=768&height=768&seed=${seed}&nologo=true&safe=true`;
-                document.getElementById(botId).innerHTML =
-                    `<img src="${imgUrl}" style="max-width:100%; border-radius:12px; display:block;" onerror="this.parentElement.textContent='ขออภัยค่ะ สร้างภาพไม่สำเร็จ (อาจเป็นเพราะเนื้อหาไม่เหมาะสม หรือระบบขัดข้องชั่วคราว) ลองใหม่ด้วยคำสั่งอื่นนะคะ';" onload="document.getElementById('chatWindow').scrollTop = document.getElementById('chatWindow').scrollHeight;">`;
-                chatHistory.push({ role:"assistant", content:`[ETC วาดภาพให้ตาม prompt: "${prompt}"]` });
-                await saveMessageToFirestore(`วาดรูป: ${prompt}`, `[ภาพที่วาดให้]`);
-            } catch(e) {
-                document.getElementById(botId).textContent = "ขออภัยค่ะ สร้างภาพไม่สำเร็จ: " + e.message;
-            }
         }
 
         function handleSendAction() {
@@ -1710,12 +1683,12 @@
             const text = input.value.trim() || "อธิบายรูปนี้ให้ฟังหน่อยค่ะ";
             input.value = "";
 
-            // ===== เพิ่มใหม่: ถ้าเป็นคำสั่งขอให้วาดรูป ให้ไปทางสร้างภาพแทนการคุยปกติ (ไม่ต้องมีรูปแนบมาด้วย) =====
+            // ===== แก้ไข: ถ้าเป็นคำสั่งขอให้วาดรูป ให้แจ้งว่ายังไม่รองรับแทน (ปิดฟีเจอร์สร้างภาพแล้ว) =====
             if (!attachedImageBase64 && detectImageGenRequest(text)) {
                 const cw = document.getElementById("chatWindow");
                 cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-user"><div class="chat-bubble">${text}</div></div>`);
                 cw.scrollTop = cw.scrollHeight;
-                generateImage(extractImagePrompt(text));
+                showImageGenDisabledMessage();
                 return;
             }
 
@@ -1770,6 +1743,20 @@
                 const reader = res.body.getReader();
                 const decoder = new TextDecoder("utf-8");
                 let fullResponse = "", buffer = "";
+                // ===== เพิ่มใหม่ (แก้บั๊กจอกระตุก): เดิมโค้ดสั่ง render คำตอบใหม่ทั้งหมด + เลื่อนจอ "ทุกครั้ง" ที่มีตัวอักษรใหม่มาจาก stream
+                // (อาจถี่เป็นร้อยครั้งต่อวินาทีตอน Groq ส่งข้อมูลมาเร็วๆ) ทำให้เบราว์เซอร์คำนวณเลย์เอาต์ใหม่รัวๆจนจอดูกระตุกเด้ง
+                // แก้โดยใช้ requestAnimationFrame รวบการอัปเดตให้เกิดแค่ครั้งเดียวต่อเฟรมจอ (สูงสุด ~60 ครั้ง/วินาที) ซึ่งลื่นพอสำหรับตาคนดูอยู่แล้ว
+                // และเบากว่าการอัปเดตทุกตัวอักษรมาก โดยยังคงความรู้สึกว่าข้อความ "ไหล" ออกมาต่อเนื่องเหมือนเดิม =====
+                let renderScheduled = false;
+                function scheduleRender() {
+                    if (renderScheduled) return;
+                    renderScheduled = true;
+                    requestAnimationFrame(() => {
+                        document.getElementById(botId).innerHTML = marked.parse(fullResponse);
+                        cw.scrollTop = cw.scrollHeight;
+                        renderScheduled = false;
+                    });
+                }
                 while(true) {
                     const {done,value} = await reader.read();
                     if(done) break;
@@ -1784,13 +1771,15 @@
                                 if (json.choices[0].delta.content) {
                                     if(fullResponse === "") document.getElementById(botId).innerHTML = "";
                                     fullResponse += json.choices[0].delta.content;
-                                    document.getElementById(botId).innerHTML = marked.parse(fullResponse);
-                                    cw.scrollTop = cw.scrollHeight;
+                                    scheduleRender(); // ===== แก้ไข: เดิมเรียก render+scroll ตรงนี้ทุกครั้ง เปลี่ยนเป็นแค่ "ขอคิว" ไว้ก่อน =====
                                 }
                             } catch(e) {}
                         }
                     }
                 }
+                // ===== เพิ่มใหม่: บังคับ render ครั้งสุดท้ายให้ครบถ้วนหลัง stream จบ กันกรณีตัวอักษรสุดท้ายยังไม่ทันถูกวาดในเฟรมสุดท้าย =====
+                document.getElementById(botId).innerHTML = marked.parse(fullResponse);
+                cw.scrollTop = cw.scrollHeight;
                 chatHistory.push({ role:"assistant", content:fullResponse });
                 await saveMessageToFirestore(text, fullResponse);
                 speakText(fullResponse); // ===== เพิ่มใหม่: อ่านคำตอบออกเสียง (จะอ่านจริงก็ต่อเมื่อเปิดสวิตช์ "เสียงตอบกลับ" ไว้ในหน้าตั้งค่า) =====
