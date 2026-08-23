@@ -128,6 +128,17 @@
             .send-arrow-btn { padding: 8px 6px; font-size: 17px; }
             .gemini-input-box input { padding: 12px 2px; }
         }
+
+        /* ===== เพิ่มใหม่: หน้าต่างกล้องสด (live camera) สำหรับถ่ายรูปส่งให้ ETC ดูโดยตรง ไม่ต้องออกไปแอปกล้องแยก ===== */
+        .camera-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(5, 2, 16, 0.9); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 70; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; }
+        .camera-modal-overlay.show { display: flex; }
+        .camera-modal-box { width: 100%; max-width: 520px; background: rgba(38, 26, 64, 0.9); border: 1px solid rgba(168, 199, 250, 0.2); border-radius: 24px; padding: 16px; box-shadow: 0 12px 40px rgba(0,0,0,0.7); display: flex; flex-direction: column; align-items: center; gap: 14px; }
+        .camera-modal-box video, .camera-modal-box img.camera-shot { width: 100%; max-height: 60vh; border-radius: 16px; background: #000; object-fit: contain; }
+        .camera-status-text { color: #cbb9ec; font-size: 13px; text-align: center; min-height: 16px; }
+        .camera-controls { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; width: 100%; }
+        .camera-btn { border-radius: 20px; padding: 10px 20px; font-size: 14px; cursor: pointer; color: #fff; background: rgba(168, 199, 250, 0.15); border: 1px solid rgba(168, 199, 250, 0.3); }
+        .camera-btn.primary { background: linear-gradient(135deg, var(--accent1, #a8c7fa), var(--accent2, #9c27b0)); font-weight: bold; border: none; }
+        .camera-btn.danger { background: rgba(231, 76, 60, 0.2); border-color: rgba(231, 76, 60, 0.5); color: #ff8a7a; }
         
         .chat-row { width: 100%; display: flex; align-items: flex-end; gap: 12px; }
         .row-bot { justify-content: flex-start; }
@@ -720,6 +731,8 @@
                     <!-- ===== เพิ่มใหม่: ปุ่มแนบรูปภาพ ให้ AI (qwen3.6-27b) ดูภาพและวิเคราะห์ได้ ===== -->
                     <input type="file" id="imageFileInput" accept="image/*" style="display:none" onchange="handleImageAttach(event)">
                     <button class="send-arrow-btn" onclick="document.getElementById('imageFileInput').click()" title="แนบรูปภาพให้ ETC ดู">📷</button>
+                    <!-- ===== เพิ่มใหม่: ปุ่มเปิดกล้องสด ถ่ายรูปแล้วดูตัวอย่างก่อนส่งให้ ETC ดู (ต่างจากปุ่ม 📷 ที่เลือกไฟล์ที่มีอยู่แล้ว) ===== -->
+                    <button class="send-arrow-btn" onclick="openCameraModal()" title="ถ่ายรูปสดส่งให้ ETC ดู">📸</button>
                     <!-- ===== แก้ไข: เพิ่ม autocomplete="off" และ name แบบสุ่ม เพื่อปิดการจำคำที่เคยพิมพ์ของเบราว์เซอร์ (popup "Saved info") ===== -->
                     <input type="text" id="userInputText" name="etc-chat-input-no-save" autocomplete="off" placeholder="พิมพ์ข้อความที่นี่..." onkeypress="if(event.key==='Enter') handleSendAction()">
                     <!-- ===== เพิ่มใหม่: ปุ่มไมโครโฟนพิมพ์ด้วยเสียง ซ่อนไว้เป็นค่าเริ่มต้น (โชว์เมื่อเปิดสวิตช์ในหน้าตั้งค่า) ===== -->
@@ -906,6 +919,22 @@
 
         <div id="logoPopup" class="logo-popup-overlay" onclick="hideLogoPopup()">
             <img src="img/ETC.png" alt="ETC Logo Large" class="logo-popup-img" onerror="this.onerror=null; this.style.display='none';">
+        </div>
+
+        <!-- ===== เพิ่มใหม่: หน้าต่างกล้องสด สำหรับถ่ายรูปแล้วดูตัวอย่างก่อนส่งให้ ETC ===== -->
+        <div id="cameraModal" class="camera-modal-overlay">
+            <div class="camera-modal-box">
+                <video id="cameraVideo" autoplay playsinline muted></video>
+                <img id="cameraShotImg" class="camera-shot" style="display:none;">
+                <canvas id="cameraCanvas" style="display:none;"></canvas>
+                <div class="camera-status-text" id="cameraStatusText"></div>
+                <div class="camera-controls">
+                    <button class="camera-btn danger" onclick="closeCameraModal()">✕ ปิด</button>
+                    <button class="camera-btn primary" id="cameraCaptureBtn" onclick="capturePhoto()">📸 ถ่ายรูป</button>
+                    <button class="camera-btn" id="cameraRetakeBtn" onclick="retakePhoto()" style="display:none;">↺ ถ่ายใหม่</button>
+                    <button class="camera-btn primary" id="cameraUseBtn" onclick="useCapturedPhoto()" style="display:none;">✓ ใช้รูปนี้</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1685,22 +1714,134 @@
         }
 
         // ============================================================
-        // สร้างภาพ (Image generation) — ปิดใช้งานถาวร
+        // ถ่ายรูปสด (Live camera) — เปิดกล้องเครื่องในเว็บโดยตรง ถ่าย+ดูตัวอย่างก่อนส่งให้ ETC
+        // ใช้ getUserMedia ซึ่งเบราว์เซอร์อนุญาตเฉพาะบน HTTPS เท่านั้น (Vercel เป็น HTTPS อยู่แล้วจึงใช้ได้ปกติ)
         // ============================================================
-        // ===== แก้ไข (สำคัญมาก - ปิดฟีเจอร์): เดิมใช้ Pollinations.ai สร้างภาพฟรี แต่พบว่าโมเดลเริ่มต้นของเขา
-        // สร้างภาพไม่เหมาะสม (เนื้อหาทางเพศ) ออกมาได้ซ้ำหลายครั้ง แม้จะเพิ่มตัวกรอง safe=true, คำต้องห้าม, และ safety prompt
-        // wrapper แล้วก็ตาม ยังหลุดผ่านได้อยู่ดี เนื่องจากเว็บนี้เป็นเว็บสาธารณะที่ใครก็เข้าถึงได้ (รวมถึงอาจมีผู้เยาว์)
-        // จึงตัดสินใจปิดฟีเจอร์นี้ไปเลย ไม่คุ้มความเสี่ยง แทนที่ด้วยข้อความแจ้งเตือนสุภาพแทน
-        // หากในอนาคตต้องการเปิดใช้ใหม่ ควรเปลี่ยนไปใช้บริการที่มีระบบตรวจสอบเนื้อหาที่เชื่อถือได้จริง (เช่น mattpaid API
-        // ที่มี content moderation รับประกัน) แทน Pollinations.ai ที่เป็นบริการฟรีไม่มี SLA รับประกันความปลอดภัย =====
+        let cameraStream = null;      // เก็บ stream กล้องที่เปิดอยู่ ไว้ปิดทีหลัง
+        let capturedPhotoDataUrl = null; // เก็บรูปที่ถ่ายไว้ รอผู้ใช้กด "ใช้รูปนี้"
+
+        async function openCameraModal() {
+            const modal = document.getElementById("cameraModal");
+            const video = document.getElementById("cameraVideo");
+            const statusText = document.getElementById("cameraStatusText");
+            // รีเซ็ต UI กลับไปโหมด "กำลังถ่าย" ทุกครั้งที่เปิดใหม่
+            video.style.display = "block";
+            document.getElementById("cameraShotImg").style.display = "none";
+            document.getElementById("cameraCaptureBtn").style.display = "inline-block";
+            document.getElementById("cameraRetakeBtn").style.display = "none";
+            document.getElementById("cameraUseBtn").style.display = "none";
+            statusText.textContent = "กำลังเปิดกล้องค่ะ...";
+            modal.classList.add("show");
+
+            // ===== เช็คก่อนว่าเบราว์เซอร์รองรับ getUserMedia ไหม (ต้องเป็น HTTPS หรือ localhost เท่านั้น) =====
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                statusText.textContent = "เบราว์เซอร์นี้ไม่รองรับการเปิดกล้องค่ะ (ต้องเข้าเว็บผ่าน HTTPS)";
+                return;
+            }
+            try {
+                // facingMode:"environment" = ขอกล้องหลังก่อนเป็นอันดับแรก (เหมาะกับมือถือ) ถ้าไม่มีเบราว์เซอร์จะใช้กล้องที่มีให้เอง
+                cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+                video.srcObject = cameraStream;
+                statusText.textContent = "";
+            } catch (err) {
+                // ===== เพิ่มใหม่: แจ้งเหตุผลที่พบบ่อยให้ผู้ใช้เข้าใจง่ายๆ แทน error code ดิบๆ =====
+                if (err.name === "NotAllowedError") {
+                    statusText.textContent = "ไม่ได้รับอนุญาตให้ใช้กล้องค่ะ กรุณาอนุญาตสิทธิ์กล้องในเบราว์เซอร์แล้วลองใหม่";
+                } else if (err.name === "NotFoundError") {
+                    statusText.textContent = "ไม่พบกล้องบนอุปกรณ์นี้ค่ะ";
+                } else {
+                    statusText.textContent = "เปิดกล้องไม่สำเร็จค่ะ: " + err.message;
+                }
+            }
+        }
+
+        function closeCameraModal() {
+            document.getElementById("cameraModal").classList.remove("show");
+            // ===== สำคัญ: ต้องปิด track ของกล้องทุกครั้งที่ปิดหน้าต่าง ไม่งั้นไฟกล้องจะติดค้าง (ไฟแจ้งเตือนกล้องทำงานค้างอยู่) =====
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+            }
+            capturedPhotoDataUrl = null;
+        }
+
+        function capturePhoto() {
+            const video = document.getElementById("cameraVideo");
+            const canvas = document.getElementById("cameraCanvas");
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+            // บีบอัดเป็น JPEG คุณภาพ 0.9 กันไฟล์ใหญ่เกินไปตอนส่งขึ้น Groq (จำกัดไว้ที่ 15MB ในหน้าเว็บ)
+            capturedPhotoDataUrl = canvas.toDataURL("image/jpeg", 0.9);
+
+            document.getElementById("cameraShotImg").src = capturedPhotoDataUrl;
+            document.getElementById("cameraShotImg").style.display = "block";
+            video.style.display = "none";
+            document.getElementById("cameraCaptureBtn").style.display = "none";
+            document.getElementById("cameraRetakeBtn").style.display = "inline-block";
+            document.getElementById("cameraUseBtn").style.display = "inline-block";
+            // หมายเหตุ: ไม่ปิด stream ตรงนี้ เก็บกล้องเปิดค้างไว้เผื่อกด "ถ่ายใหม่" จะได้ไม่ต้องขอสิทธิ์กล้องซ้ำ
+        }
+
+        function retakePhoto() {
+            capturedPhotoDataUrl = null;
+            document.getElementById("cameraShotImg").style.display = "none";
+            document.getElementById("cameraVideo").style.display = "block";
+            document.getElementById("cameraCaptureBtn").style.display = "inline-block";
+            document.getElementById("cameraRetakeBtn").style.display = "none";
+            document.getElementById("cameraUseBtn").style.display = "none";
+        }
+
+        function useCapturedPhoto() {
+            if (!capturedPhotoDataUrl) return;
+            // ใช้ตัวแปรและกล่องพรีวิวเดียวกับปุ่มแนบไฟล์ 📷 เดิม เพื่อให้ตอนกดส่งทำงานเหมือนกันทุกทาง
+            attachedImageBase64 = capturedPhotoDataUrl;
+            document.getElementById("imagePreviewThumb").src = attachedImageBase64;
+            document.getElementById("imagePreviewBox").style.display = "block";
+            closeCameraModal();
+        }
+
+        // ============================================================
+        // สร้างภาพ (Image generation) — เปิดใช้งานผ่าน Google Gemini API (ฟรี ไม่ผูกบัตร)
+        // ============================================================
+        // ===== แก้ไข (สำคัญ): เดิมใช้ Pollinations.ai แต่พบว่าสร้างภาพไม่เหมาะสมออกมาซ้ำๆ แม้เพิ่มตัวกรองแล้วก็ตาม
+        // จึงปิดไปก่อน ตอนนี้เปลี่ยนมาใช้ Gemini API (โมเดล gemini-2.5-flash-image) แทน เพราะมีตัวกรองเนื้อหาในตัว
+        // ที่เข้มงวดกว่ามาก และมี free tier ที่ไม่ต้องผูกบัตรเครดิต (ผ่าน Google AI Studio) เหมาะกับเว็บสาธารณะแบบนี้ =====
         function detectImageGenRequest(text) {
             const kw = ["วาดรูป", "วาดภาพ", "สร้างภาพ", "สร้างรูป", "เจนรูป", "เจนภาพ", "แต่งรูป", "generate image", "draw a picture", "draw an image"];
             return kw.some(k => text.toLowerCase().includes(k));
         }
-        function showImageGenDisabledMessage() {
+
+        // เรียก backend /api/generate-image เพื่อสร้างภาพ แล้วแสดงผลในบับเบิลแชทของ ETC
+        async function generateImageWithGemini(prompt) {
             const cw = document.getElementById("chatWindow");
-            cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-bot"><img src="img/ETC.png" class="avatar-img" onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('avatar-fallback');this.innerText='ETC';"><div class="chat-bubble">ขออภัยค่ะ ตอนนี้ ETC ยังไม่รองรับการสร้างภาพนะคะ แต่ยินดีช่วยตอบคำถามหรือวิเคราะห์รูปภาพที่คุณส่งมาให้ค่ะ 😊</div></div>`);
+            const botId = 'imggen-' + Date.now();
+            // แสดงบับเบิลของ ETC พร้อมข้อความ "กำลังวาดภาพ..." ระหว่างรอ
+            cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-bot"><img src="img/ETC.png" class="avatar-img" onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('avatar-fallback');this.innerText='ETC';"><div class="chat-bubble" id="${botId}">ETC กำลังวาดภาพให้อยู่ค่ะ รอสักครู่นะคะ 🎨</div></div>`);
             cw.scrollTop = cw.scrollHeight;
+
+            try {
+                const res = await fetch("/api/generate-image", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ prompt })
+                });
+                const data = await res.json();
+                const bubble = document.getElementById(botId);
+
+                if (!res.ok || !data.image) {
+                    // ===== เพิ่มใหม่: ถ้าโดนตัวกรองความปลอดภัยของ Gemini บล็อก ให้แจ้งเหตุผลสุภาพแทน error ดิบๆ =====
+                    bubble.innerText = data.blocked
+                        ? "ขออภัยค่ะ คำขอนี้ ETC ไม่สามารถสร้างภาพให้ได้ เนื่องจากเนื้อหาอาจไม่เหมาะสมค่ะ ลองเปลี่ยนคำอธิบายภาพแล้วลองใหม่ได้นะคะ"
+                        : "ขออภัยค่ะ สร้างภาพไม่สำเร็จ ลองใหม่อีกครั้งนะคะ";
+                    return;
+                }
+                // แสดงภาพที่สร้างได้ในบับเบิล (data.image เป็น data URL base64 อยู่แล้วจาก backend)
+                bubble.innerHTML = `<img src="${data.image}" style="max-width:100%; border-radius:12px; display:block;">`;
+                cw.scrollTop = cw.scrollHeight;
+            } catch (err) {
+                document.getElementById(botId).innerText = "เชื่อมต่อระบบสร้างภาพไม่สำเร็จค่ะ: " + err.message;
+            }
         }
 
         function handleSendAction() {
@@ -1725,12 +1866,12 @@
             // บนคอมไม่มีผลกระทบอะไร เพราะไม่มีแป้นพิมพ์บนจอให้ซ่อนอยู่แล้ว =====
             input.blur();
 
-            // ===== แก้ไข: ถ้าเป็นคำสั่งขอให้วาดรูป ให้แจ้งว่ายังไม่รองรับแทน (ปิดฟีเจอร์สร้างภาพแล้ว) =====
+            // ===== แก้ไข: ถ้าเป็นคำสั่งขอให้วาดรูป ให้เรียก Gemini API สร้างภาพจริงแทน (เปิดใช้งานแล้ว) =====
             if (!attachedImageBase64 && detectImageGenRequest(text)) {
                 const cw = document.getElementById("chatWindow");
                 cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-user"><div class="chat-bubble">${text}</div></div>`);
                 cw.scrollTop = cw.scrollHeight;
-                showImageGenDisabledMessage();
+                generateImageWithGemini(text);
                 return;
             }
 
