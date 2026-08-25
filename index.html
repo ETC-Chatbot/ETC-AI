@@ -1,0 +1,1993 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <!-- ===== แก้ไข: เพิ่ม maximum-scale=1.0 และ viewport-fit=cover ป้องกันเบราว์เซอร์มือถือ zoom หน้าเข้ามาเองตอนกดพิมพ์ในช่อง input ===== -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+    <title>ETC AI</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- ===== Firebase SDK ===== -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <!-- ===== เพิ่มใหม่: Firestore SDK สำหรับเก็บประวัติแชท ===== -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <style>
+        /* ===== เพิ่มใหม่: ตัวแปรสีธีมหลัก (accent) ที่ผู้ใช้ปรับได้เองในหน้าตั้งค่า ค่าเริ่มต้นคือโทนม่วง-ฟ้าเดิมของแอป ===== */
+        :root {
+            --accent1: #a8c7fa;
+            --accent2: #9c27b0;
+        }
+        /* ===== เพิ่มใหม่: ปุ่มวงกลมเลือกสีธีมในหน้าตั้งค่า ===== */
+        .accent-swatch-row { display: flex; gap: 10px; margin-top: 4px; }
+        .accent-swatch { width: 32px; height: 32px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: transform 0.15s ease, border-color 0.15s ease; flex-shrink: 0; }
+        .accent-swatch:hover { transform: scale(1.1); }
+        .accent-swatch.active { border-color: #fff; }
+        /* ===== แก้ไข: ใช้ 100vh เป็นค่าตั้งต้น (เผื่อเบราว์เซอร์เก่า) แล้วทับด้วย 100dvh ===== */
+        /* dvh = dynamic viewport height จะปรับตามพื้นที่จอที่เหลือจริงๆ เมื่อแป้นพิมพ์มือถือเด้งขึ้นมา ต่างจาก vh ที่คงที่ตายตัว ทำให้ก่อนหน้านี้ทุกอย่างเลื่อนตำแหน่งมั่วตอนพิมพ์ */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; display: flex; height: 100vh; height: 100dvh; overflow: hidden; background-color: #000; }
+        /* ===== แก้ไข: sidebar ซ่อนไว้เป็น position:fixed แล้วเลื่อนออกนอกจอด้วย translateX แทน เพื่อให้ toggle เปิด/ปิดได้ ===== */
+        .icon-sidebar { position: fixed; top: 0; left: 0; width: 68px; background-color: #0e0e0e; height: 100%; height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 20px 0; box-sizing: border-box; flex-shrink: 0; z-index: 50; border-right: 1px solid #222; transform: translateX(-100%); transition: transform 0.25s ease; }
+        /* ===== เพิ่มใหม่: class .open ใช้กับ JS toggle บนมือถือ / :hover ใช้บนคอม ===== */
+        .icon-sidebar.open { transform: translateX(0); }
+        /* ===== แก้ไข (บั๊ก): เดิมมี .icon-sidebar:hover อยู่ แต่ตัว sidebar ถูกซ่อนออกนอกจอ (translateX(-100%)) อยู่แล้ว
+           เมาส์เลยไม่มีทางไปชี้โดนตัว sidebar ได้ตั้งแต่แรก (มันไม่อยู่บนจอ) กฎนี้เลยไม่เคยทำงานจริง
+           ต้องใช้ .sidebar-hover-zone (แถบโปร่งใสชิดขอบจอ) เป็นตัวดักแทน แล้วใช้ :has() ให้แถบนั้นสั่งเปิด sidebar อีกที ===== */
+        @media (hover: hover) and (pointer: fine) {
+            .sidebar-wrapper:has(.sidebar-hover-zone:hover) .icon-sidebar,
+            .sidebar-wrapper:has(.icon-sidebar:hover) .icon-sidebar {
+                transform: translateX(0);
+            }
+        }
+        /* ===== เพิ่มใหม่: แถบแคบๆชิดขอบซ้ายจอ ใช้ดักเมาส์ชี้บนคอมเพื่อเด้ง sidebar ออกมา (โปร่งใส มองไม่เห็น) ===== */
+        .sidebar-hover-zone { position: fixed; top: 0; left: 0; width: 14px; height: 100%; height: 100dvh; z-index: 45; }
+        @media (hover: none), (pointer: coarse) {
+            .sidebar-hover-zone { display: none; } /* บนมือถือไม่มี hover จริง เลยไม่ต้องมีแถบดักนี้ */
+        }
+        /* ===== เพิ่มใหม่: ปุ่ม toggle sidebar แบบ hamburger กดได้ทั้งมือถือและคอม ===== */
+        .sidebar-toggle-btn { position: fixed; top: 16px; left: 16px; width: 40px; height: 40px; border-radius: 50%; background: rgba(38, 26, 64, 0.85); backdrop-filter: blur(10px); border: 1px solid rgba(168, 199, 250, 0.2); color: #a8c7fa; font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 60; transition: background 0.2s ease, left 0.25s ease, opacity 0.2s ease; }
+        .sidebar-toggle-btn:hover { background: rgba(60, 40, 100, 0.9); }
+        /* ===== เพิ่มใหม่: ซ่อนปุ่ม toggle ไปเลยตอนเปิดหน้าอื่นซ้อนอยู่ (อัปเกรด/ตั้งค่า/ประวัติ/ค้นหา) กันไม่ให้ไปทับปุ่มของหน้านั้นๆ (เดิมทับกันเพราะปุ่มนี้ลอยอยู่ตลอดไม่ว่าจะเปิดหน้าไหน) ===== */
+        .sidebar-toggle-btn.overlay-open { opacity: 0; pointer-events: none; }
+        .sidebar-wrapper:has(.icon-sidebar.open) .sidebar-toggle-btn,
+        .sidebar-wrapper:has(.sidebar-hover-zone:hover) .sidebar-toggle-btn,
+        .sidebar-wrapper:has(.icon-sidebar:hover) .sidebar-toggle-btn {
+            left: 84px;
+        }
+        .top-icons { display: flex; flex-direction: column; align-items: center; gap: 24px; }
+        
+        .main-container { flex: 1; display: flex; flex-direction: column; position: relative; background: url('img/EGG.jpg') no-repeat center center; background-size: cover; z-index: 1; overflow: hidden; width: 100%; }
+
+        #stars-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+        
+        .sparkle { position: absolute; background: radial-gradient(circle, rgba(255,255,255,0.8) 0%, transparent 70%); border-radius: 50%; animation: twinkle var(--duration) infinite ease-in-out; opacity: 0; }
+        @keyframes twinkle { 0%, 100% { opacity: 0; transform: scale(0.5); } 50% { opacity: 0.6; transform: scale(1.2); } }
+        
+        .logo-container { position: relative; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .logo-spin { width: 40px; height: 40px; border-radius: 50%; z-index: 2; animation: rotateLogo 8s linear infinite; object-fit: cover; border: 2px solid rgba(168, 199, 250, 0.2); }
+        @keyframes rotateLogo { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .logo-container::before { content: ""; position: absolute; width: 46px; height: 46px; border-radius: 50%; background: rgba(168, 199, 250, 0.4); filter: blur(8px); z-index: 1; animation: glowPulse 2s ease-in-out infinite; }
+        @keyframes glowPulse { 0%, 100% { opacity: 0.6; transform: scale(1); } 50% { opacity: 1; transform: scale(1.1); } }
+        .logo-container::after { content: ""; position: absolute; width: 52px; height: 52px; border-radius: 50%; background: conic-gradient(from 0deg, #ffb4a2, #a8c7fa, #9c27b0, #ffb4a2); filter: blur(1px); z-index: 1; animation: rotateLogo 3s linear infinite, sparklePulse 1s ease-in-out infinite alternate; }
+        @keyframes sparklePulse { 0% { opacity: 0.5; } 100% { opacity: 1; } }
+
+        /* ===== แก้ไข: เพิ่ม position relative + z-index ให้ header-top อยู่เหนือ chat-view เสมอ ป้องกันข้อความแชทบังปุ่มอัปเกรด ===== */
+        .header-top { width: 100%; display: flex; justify-content: flex-end; padding: 16px 24px; box-sizing: border-box; position: relative; z-index: 15; }
+        .upgrade-btn { background-color: rgba(26, 26, 26, 0.7); color: #a8c7fa; border: 1px solid #444; padding: 8px 16px; border-radius: 20px; font-size: 14px; cursor: pointer; }
+        
+        /* ===== แก้ไข: เปลี่ยน top จาก 0 เป็น 70px เว้นพื้นที่ให้แถบปุ่มอัปเกรดด้านบน ไม่ให้ข้อความแชทไปทับ/ขึ้นระดับเดียวกับปุ่ม ===== */
+        /* ===== แก้ไข: เพิ่มระยะ top จาก 70px เป็น 90px ให้ข้อความแชทเริ่มต่ำกว่าแถบ header/ปุ่มอัปเกรดมากขึ้น ===== */
+        /* ===== แก้ไข (บั๊ก): เอา scroll-behavior:smooth ออก เพราะเดิมทำให้จอ "เด้ง" กระตุกตลอดเวลาที่ AI กำลังตอบยาวๆ
+           สาเหตุ: ระหว่าง streaming คำตอบ โค้ดจะสั่งเลื่อนจอ (cw.scrollTop = cw.scrollHeight) ทุกครั้งที่มีคำใหม่มา (หลายสิบครั้งต่อวินาที)
+           พอตั้ง smooth ไว้ แต่ละครั้งจะพยายามเล่น animation เลื่อนจอนุ่มนวลซ้อนทับกันเรื่อยๆ ทำให้จอดูกระตุกเด้งไปมาแทนที่จะเลื่อนลื่นๆ
+           เปลี่ยนเป็นเลื่อนทันที (auto) ระหว่างพิมพ์ตอบแทน ลื่นกว่ามากสำหรับกรณีนี้โดยเฉพาะ ===== */
+        .chat-view { position: absolute; top: 90px; left: 0; right: 0; bottom: 100px; overflow-y: auto !important; -webkit-overflow-scrolling: touch; padding: 20px; display: flex; flex-direction: column; gap: 15px; max-width: 600px; width: 50%; margin-left: auto; margin-right: auto; box-sizing: border-box; z-index: 2; transition: all 0.5s ease; }
+        /* ===== เพิ่มใหม่: บนจอมือถือ (แคบกว่า 768px) ให้กล่องแชทกว้างเต็มจอแทน 50% ตายตัว (เดิมทำให้ข้อความบีบแคบเป็นแถบแคบๆตรงกลางจอ) ===== */
+        @media (max-width: 768px) {
+            .chat-view { width: 100%; max-width: 100%; top: 70px; bottom: 90px; padding: 14px; }
+            .chat-bubble { max-width: 88%; font-size: 15px; }
+        }
+        .chat-view::-webkit-scrollbar { width: 8px !important; }
+        .chat-view::-webkit-scrollbar-thumb { background-color: #555 !important; border-radius: 4px !important; }
+
+        #centerTitle { transition: opacity 0.4s ease; opacity: 1; color: #e3e3e3; margin-bottom: 0; }
+        /* ===== แก้ไข: เอา position:absolute + top:50% ออก เปลี่ยนไปให้ .hero-section (flexbox) เป็นตัวจัดตำแหน่งแทน =====
+           สาเหตุเดิม: top:50%/60% คำนวณจาก % ของความสูงจอ พอแป้นพิมพ์มือถือเด้งขึ้นมา ความสูงจอที่เหลือ (visual viewport) หดลงมาก
+           ทำให้ระยะห่างระหว่างข้อความทักทายกับกล่องพิมพ์ (ที่เป็น % เท่ากัน) เหลือน้อยจนซ้อนทับกัน แก้โดยให้ flexbox จัดการระยะห่างแทน (gap) ซึ่งจะไม่ซ้อนทับกันไม่ว่าจอจะเหลือพื้นที่แค่ไหน */
+        #welcomeContainer { position: relative; width: 100%; max-width: 820px; z-index: 5; transition: opacity 0.4s ease; text-align: center; }
+        /* ===== แก้ไข: ซ่อนแบบ display:none ทันทีตอนเริ่มแชท (เดิมใช้ transform เลื่อนขึ้นไปไกลๆซึ่งบนมือถือทำให้มีพื้นที่ว่างเหลือค้างและซ้อนทับได้) ===== */
+        .fade-out-up { display: none !important; }
+
+        /* ===== เพิ่มใหม่: กล่องครอบ welcomeContainer + inputWrapper (ตอนยังไม่เริ่มแชท) จัดกลางแนวตั้ง/นอนด้วย flexbox แทนตำแหน่ง % ===== */
+        .hero-section { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; padding: 24px 20px; box-sizing: border-box; z-index: 4; }
+        /* ===== แก้ไข (บั๊กสำคัญ): เดิม hero-section ยังคงครอบเต็มจอค้างอยู่ตลอด แม้ #welcomeContainer ข้างในจะถูกซ่อนไปแล้วหลังเริ่มแชท
+           เพราะตัว div เองไม่เคยถูกซ่อน (ซ่อนแค่ลูกข้างใน) มันเลยไปดักจับการแตะ/scroll ทับ .chat-view ที่อยู่ข้างล่าง (z-index ต่ำกว่า) แบบไม่โชว์ให้เห็น
+           ทำให้เลื่อนดูข้อความแชทเก่าไม่ได้ทั้งบนมือถือและคอม แก้โดยปิดการดักจับด้วย pointer-events:none ตอนเริ่มแชทแล้ว
+           ส่วนกล่องพิมพ์ที่หลุดออกไปแบบ position:fixed (.is-chatting-input) ยังคงกดได้ปกติเพราะสั่ง pointer-events:auto ทับไว้เฉพาะจุด ===== */
+        .hero-section.chat-active { pointer-events: none; }
+        .hero-section.chat-active .is-chatting-input { pointer-events: auto; }
+        /* ===== แก้ไข (บั๊กหลัก): พอเริ่มแชทแล้ว .hero-section ยัง "ครอบเต็มจอ" อยู่แบบล่องหน (มองไม่เห็นเพราะไม่มีพื้นหลัง แต่ยังกินพื้นที่ทั้งจอ position:absolute inset:0)
+           ทำให้มันดักการปัดนิ้ว/scroll wheel ที่ตำแหน่งซ้อนทับกับ chat-view ไว้ก่อน chat-view จะได้รับ event เอง เลยเลื่อนแชทไม่ได้ทั้งคอมและมือถือ
+           แก้โดยปิด pointer-events ของทั้งกล่องนี้ทันทีที่เริ่มแชท (class .chatting) แล้วเปิดเฉพาะกล่องพิมพ์ข้อความที่ยังต้องกดได้กลับมา ===== */
+        .hero-section.chatting { pointer-events: none; }
+        .hero-section.chatting .bottom-input-container { pointer-events: auto; }
+
+        /* ===== แก้ไข: เอา position:absolute + top:60% ออก ให้เป็นสมาชิกปกติของ .hero-section (flex) แทน ===== */
+        .bottom-input-container { width: 100%; display: flex; justify-content: center; z-index: 3; transition: opacity 0.3s ease; padding: 0 20px; box-sizing: border-box; }
+        /* ===== แก้ไข: ตอนเริ่มแชทแล้ว ให้กล่องพิมพ์หลุดจาก flex มาปักหมุดชิดล่างจอแบบ fixed เสมอ ไม่ว่าแป้นพิมพ์จะเด้งหรือไม่ก็ตาม
+           ใช้ env(safe-area-inset-bottom) เผื่อพื้นที่ปุ่ม home แบบ gesture ของมือถือรุ่นใหม่ด้วย ===== */
+        .is-chatting-input { position: fixed !important; left: 50%; bottom: max(16px, env(safe-area-inset-bottom)) !important; transform: translateX(-50%) !important; z-index: 30; }
+        
+        /* ===== แก้ไข: เปลี่ยนสีพื้นหลังจากเทาเข้มล้วน เป็นโทนม่วง-น้ำเงินเข้มให้กลืนกับพื้นหลังจักรวาล ปรับสีขอบและเงาให้เข้าธีมเดียวกัน ===== */
+        .gemini-input-box { width: 100%; max-width: 760px; background-color: rgba(38, 26, 64, 0.75); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-radius: 32px; padding: 8px 20px; display: flex; align-items: center; border: 1px solid rgba(168, 199, 250, 0.2); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7), 0 4px 12px rgba(20, 10, 40, 0.6), 0 0 30px rgba(156, 39, 176, 0.2); }
+        .gemini-input-box input { flex: 1; min-width: 0; background: transparent; border: none; outline: none; color: #e3e3e3; font-size: 16px; padding: 12px 6px; }
+        /* ===== แก้ไข: เพิ่ม flex-shrink:0 กันปุ่ม (กล้อง/ไมค์/ส่ง) ถูกบีบเล็กลงเวลาช่องพิมพ์ขยายเต็มพื้นที่บนจอแคบ ===== */
+        .send-arrow-btn { background: transparent; color: var(--accent1, #a8c7fa); border: none; cursor: pointer; font-size: 18px; padding: 10px; flex-shrink: 0; }
+        /* ===== เพิ่มใหม่: บนจอมือถือแคบมาก (≤400px) ลด padding ของกล่องพิมพ์และปุ่มลงเล็กน้อย กันปุ่มหลายตัว (กล้อง/ไมค์/ส่ง) รวมกับช่องพิมพ์แน่นเกินไปจนพิมพ์ยาก ===== */
+        @media (max-width: 400px) {
+            .gemini-input-box { padding: 6px 10px; }
+            .send-arrow-btn { padding: 8px 6px; font-size: 17px; }
+            .gemini-input-box input { padding: 12px 2px; }
+        }
+
+        /* ===== เพิ่มใหม่: หน้าต่างกล้องสด (live camera) สำหรับถ่ายรูปส่งให้ ETC ดูโดยตรง ไม่ต้องออกไปแอปกล้องแยก ===== */
+        .camera-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(5, 2, 16, 0.9); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 70; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; }
+        .camera-modal-overlay.show { display: flex; }
+        .camera-modal-box { width: 100%; max-width: 520px; background: rgba(38, 26, 64, 0.9); border: 1px solid rgba(168, 199, 250, 0.2); border-radius: 24px; padding: 16px; box-shadow: 0 12px 40px rgba(0,0,0,0.7); display: flex; flex-direction: column; align-items: center; gap: 14px; }
+        .camera-modal-box video, .camera-modal-box img.camera-shot { width: 100%; max-height: 60vh; border-radius: 16px; background: #000; object-fit: contain; }
+        .camera-status-text { color: #cbb9ec; font-size: 13px; text-align: center; min-height: 16px; }
+        .camera-controls { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; width: 100%; }
+        .camera-btn { border-radius: 20px; padding: 10px 20px; font-size: 14px; cursor: pointer; color: #fff; background: rgba(168, 199, 250, 0.15); border: 1px solid rgba(168, 199, 250, 0.3); }
+        .camera-btn.primary { background: linear-gradient(135deg, var(--accent1, #a8c7fa), var(--accent2, #9c27b0)); font-weight: bold; border: none; }
+        .camera-btn.danger { background: rgba(231, 76, 60, 0.2); border-color: rgba(231, 76, 60, 0.5); color: #ff8a7a; }
+        
+        .chat-row { width: 100%; display: flex; align-items: flex-end; gap: 12px; }
+        .row-bot { justify-content: flex-start; }
+        .row-user { justify-content: flex-end; }
+        /* ===== แก้ไข: เปลี่ยนสีพื้นหลังบับเบิลจากเทาเข้มล้วน เป็นโทนม่วง-น้ำเงินเข้ม ให้กลืนกับธีมพื้นหลังจักรวาล ===== */
+        .chat-bubble { width: fit-content; max-width: 80%; font-size: var(--chat-font-size, 16px); padding: 10px 16px; border-radius: 18px; background: rgba(38, 26, 64, 0.75); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(168, 199, 250, 0.15); color: #fff; overflow-wrap: anywhere; word-break: break-word; }
+        /* ===== เพิ่มใหม่ (แก้บั๊ก): เดิมโค้ดยาวๆ (เช่น code block จาก AI) ทะลุขอบกล่องแชทออกไปทั้งแนวนอน ต้องบังคับให้ <pre>/<code> ตัดบรรทัดและ scroll แนวนอนแค่ในกรอบตัวเองเท่านั้น ไม่ดันขอบกล่องแชทให้กว้างเกิน ===== */
+        .chat-bubble pre { max-width: 100%; overflow-x: auto; white-space: pre; box-sizing: border-box; background: rgba(0,0,0,0.3); border-radius: 8px; padding: 10px; }
+        .chat-bubble code { word-break: break-word; white-space: pre-wrap; }
+        .chat-bubble pre code { white-space: pre; word-break: normal; }
+        /* ===== เพิ่มใหม่: แบนเนอร์เตือน "แชทนี้ยาวเกินไปแล้ว" แสดงคั่นกลางบทสนทนา ไม่บล็อกการใช้งาน แค่แนะนำ ===== */
+        .chat-length-warning { align-self: center; max-width: 90%; background: rgba(243, 156, 18, 0.12); border: 1px solid rgba(243, 156, 18, 0.35); border-radius: 14px; padding: 12px 16px; text-align: center; font-size: 13.5px; color: #f5c26b; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+        .chat-length-warning button { background: rgba(243, 156, 18, 0.2); border: 1px solid rgba(243, 156, 18, 0.5); color: #f5c26b; padding: 7px 16px; border-radius: 20px; font-size: 13px; cursor: pointer; transition: background 0.2s ease; }
+        .chat-length-warning button:hover { background: rgba(243, 156, 18, 0.32); }
+        .row-user .chat-bubble { background-color: var(--accent2, rgba(98, 0, 234, 0.7)); }
+        .avatar-user { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; background-color: #9c27b0; color: white; }
+        .avatar-img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+        .menu-icon { color: #c4c7c5; font-size: 18px; cursor: pointer; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
+
+        /* ===== เพิ่มใหม่: เอฟเฟกต์เรืองแสง neon ให้ไอคอนอิเล็กทรอนิกส์ (⚡🔬💾) เข้ากับลายเส้นวงจรสีฟ้า-ชมพูในพื้นหลัง ===== */
+        .electronic-icon {
+            transition: transform 0.25s ease, filter 0.25s ease;
+            filter: drop-shadow(0 0 4px rgba(168, 199, 250, 0.5));
+        }
+        .electronic-icon:hover {
+            transform: scale(1.15);
+            filter: drop-shadow(0 0 10px rgba(168, 199, 250, 0.9)) drop-shadow(0 0 18px rgba(156, 39, 176, 0.6));
+        }
+
+        /* ===== เพิ่มใหม่: ใช้กรณีรูป avatar โหลดไม่ขึ้น (เช่น ยังไม่มีไฟล์ img/ETC.webp) ===== */
+        /* แทนที่จะขึ้นไอคอนรูปแตก จะโชว์วงกลมสีพื้นแทนแบบสวยงาม */
+        .avatar-img.avatar-fallback { background: linear-gradient(135deg, var(--accent1, #a8c7fa), var(--accent2, #9c27b0)); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; color: #fff; }
+
+        /* ===== เพิ่มใหม่: fallback ของโลโก้ ใช้กรณีไฟล์ img/ETC.png เสียหรือเปิดไม่ได้ แสดงวงกลม gradient แทนไอคอนแตก ===== */
+        .logo-spin.logo-fallback { background: conic-gradient(from 0deg, #ffb4a2, #a8c7fa, #9c27b0, #ffb4a2); }
+
+        /* ===== เพิ่มใหม่: CSS สำหรับหน้าอัปเกรดที่รวมเข้ามาในไฟล์เดียวกัน ===== */
+        .upgrade-overlay {
+            display: none; /* ซ่อนไว้เป็นค่าเริ่มต้น แสดงผลด้วย JS เมื่อกดปุ่มอัปเกรด */
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 20; /* อยู่เหนือทุกอย่างในหน้าแชท */
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.55); /* ทำให้ฉากหลังแชทมืดลงนิดหน่อย เน้นหน้าอัปเกรด */
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            animation: fadeInUpgrade 0.35s ease;
+        }
+        .upgrade-overlay.show { display: flex; }
+        @keyframes fadeInUpgrade { from { opacity: 0; } to { opacity: 1; } }
+
+        .upgrade-overlay .back-btn {
+            position: absolute;
+            top: 24px;
+            left: 24px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background-color: rgba(38, 26, 64, 0.75);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            color: #a8c7fa;
+            border: 1px solid rgba(168, 199, 250, 0.2);
+            padding: 10px 18px;
+            border-radius: 20px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: transform 0.2s ease, background-color 0.2s ease;
+        }
+        .upgrade-overlay .back-btn:hover {
+            transform: translateX(-3px);
+            background-color: rgba(50, 35, 80, 0.85);
+        }
+
+        .upgrade-overlay .icon-glow {
+            position: relative;
+            width: 90px;
+            height: 90px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 42px;
+            margin-bottom: 28px;
+        }
+        .upgrade-overlay .icon-glow::before {
+            content: "";
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: conic-gradient(from 0deg, #ffb4a2, #a8c7fa, #9c27b0, #ffb4a2);
+            filter: blur(18px);
+            opacity: 0.6;
+            animation: rotateLogo 4s linear infinite, sparklePulse 2s ease-in-out infinite alternate;
+        }
+
+        .upgrade-overlay .upgrade-title {
+            color: #f0eaff;
+            font-size: 28px;
+            margin-bottom: 12px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .upgrade-overlay .upgrade-subtitle {
+            color: #b8b3c9;
+            font-size: 15px;
+            max-width: 420px;
+            line-height: 1.7;
+            margin-bottom: 32px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .upgrade-overlay .status-card {
+            background-color: rgba(38, 26, 64, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(168, 199, 250, 0.15);
+            border-radius: 18px;
+            padding: 16px 28px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #a8c7fa;
+            font-size: 14px;
+            position: relative;
+            z-index: 2;
+        }
+        .upgrade-overlay .status-card-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ffb4a2;
+            box-shadow: 0 0 8px #ffb4a2;
+            animation: blinkUpgrade 1.4s infinite ease-in-out;
+        }
+        @keyframes blinkUpgrade {
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 1; }
+        }
+
+        /* ===== เพิ่มใหม่: popup แสดงรูปโลโก้ขนาดใหญ่กลางจอ ===== */
+        .logo-popup-overlay {
+            display: none; /* ซ่อนไว้เป็นค่าเริ่มต้น */
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 30; /* อยู่เหนือทุกอย่าง รวมถึงหน้าอัปเกรด */
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            cursor: pointer; /* คลิกที่ใดก็ได้บนฉากหลังเพื่อปิด popup */
+            animation: fadeInUpgrade 0.3s ease;
+        }
+        .logo-popup-overlay.show { display: flex; }
+
+        .logo-popup-img {
+            width: 220px;
+            height: 220px;
+            border-radius: 50%;
+            object-fit: cover;
+            box-shadow: 0 0 60px rgba(168, 199, 250, 0.4), 0 0 100px rgba(156, 39, 176, 0.3);
+            animation: logoPopupIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        @keyframes logoPopupIn {
+            from { transform: scale(0.6); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        /* ===== เพิ่มใหม่: CSS หน้าตั้งค่า (Settings) สไตล์คล้าย ChatGPT ปรับโทนให้เข้ากับธีมม่วง-ดำของเว็บ ===== */
+        .settings-overlay {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 25;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            animation: fadeInUpgrade 0.3s ease;
+        }
+        .settings-overlay.show { display: flex; }
+
+        .settings-panel {
+            width: 90%;
+            max-width: 420px;
+            max-height: 80vh;
+            overflow-y: auto;
+            background: rgba(24, 16, 38, 0.95);
+            border: 1px solid rgba(168, 199, 250, 0.15);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+            animation: logoPopupIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        /* ===== เพิ่มใหม่: ขยายหน้าตั้งค่าให้กว้างขึ้น เพื่อรองรับเมนูซ้าย+เนื้อหาขวาแบบ ChatGPT ===== */
+        .settings-panel.wide { max-width: 600px; max-height: 82vh; display: flex; flex-direction: column; }
+        .settings-layout { display: flex; flex: 1; min-height: 0; }
+        .settings-nav { width: 148px; flex-shrink: 0; border-right: 1px solid rgba(255,255,255,0.08); padding: 14px 8px; display: flex; flex-direction: column; gap: 3px; overflow-y: auto; }
+        .settings-nav-item { background: none; border: none; color: #b8b3c9; padding: 10px 12px; border-radius: 10px; text-align: left; cursor: pointer; font-size: 13.5px; transition: background 0.15s ease, color 0.15s ease; }
+        .settings-nav-item:hover { background: rgba(255,255,255,0.05); }
+        .settings-nav-item.active { background: rgba(168, 199, 250, 0.15); color: #fff; font-weight: 600; }
+        .settings-content { flex: 1; min-width: 0; padding: 20px 22px; overflow-y: auto; }
+        .settings-content::-webkit-scrollbar { width: 6px; }
+        .settings-content::-webkit-scrollbar-thumb { background-color: #555; border-radius: 4px; }
+        /* ===== มือถือจอแคบ: เปลี่ยนเมนูซ้ายเป็นแท็บแนวนอนด้านบนแทน ===== */
+        @media (max-width: 520px) {
+            .settings-layout { flex-direction: column; }
+            .settings-nav { width: 100%; flex-direction: row; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.08); overflow-x: auto; padding: 10px 8px; }
+            .settings-nav-item { white-space: nowrap; }
+        }
+        .settings-panel::-webkit-scrollbar { width: 6px; }
+        .settings-panel::-webkit-scrollbar-thumb { background-color: #555; border-radius: 4px; }
+
+        .settings-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 22px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        .settings-header h2 { color: #f0eaff; font-size: 19px; }
+        .settings-close-btn {
+            background: rgba(255,255,255,0.06);
+            border: none;
+            color: #c4c7c5;
+            width: 30px; height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s ease;
+        }
+        .settings-close-btn:hover { background: rgba(255,255,255,0.15); }
+
+        .settings-body { padding: 20px 22px; }
+
+        /* การ์ดโปรไฟล์ผู้ใช้ */
+        .profile-card {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 18px;
+        }
+        .profile-avatar-large {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #ffb4a2, #9c27b0);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            flex-shrink: 0;
+            object-fit: cover;
+            border: 2px solid rgba(168, 199, 250, 0.3);
+            transition: transform 0.2s ease;
+            overflow: hidden;
+        }
+        .profile-avatar-large:hover { transform: scale(1.05); }
+        .profile-avatar-large img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+
+        .profile-info { flex: 1; }
+        .profile-name-input {
+            width: 100%;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(168, 199, 250, 0.15);
+            border-radius: 10px;
+            padding: 9px 12px;
+            color: #f0eaff;
+            font-size: 16px;
+            outline: none;
+            margin-bottom: 6px;
+        }
+        .profile-name-input:focus { border-color: #a8c7fa; }
+        .profile-hint { color: #8a8597; font-size: 12px; }
+
+        .settings-divider {
+            height: 1px;
+            background: rgba(255,255,255,0.08);
+            margin: 16px 0;
+        }
+
+        .settings-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 0;
+            color: #e3e3e3;
+            font-size: 14.5px;
+        }
+
+        .settings-select {
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(168, 199, 250, 0.15);
+            border-radius: 8px;
+            color: #c9c4d8;
+            padding: 6px 10px;
+            font-size: 13px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        /* Toggle switch */
+        .settings-toggle { position: relative; display: inline-block; width: 40px; height: 22px; }
+        .settings-toggle input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: absolute; cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(255,255,255,0.15);
+            border-radius: 22px;
+            transition: 0.25s;
+        }
+        .toggle-slider::before {
+            position: absolute; content: "";
+            height: 16px; width: 16px;
+            left: 3px; bottom: 3px;
+            background-color: #fff;
+            border-radius: 50%;
+            transition: 0.25s;
+        }
+        .settings-toggle input:checked + .toggle-slider {
+            background: linear-gradient(135deg, var(--accent1, #a8c7fa), var(--accent2, #9c27b0));
+        }
+        .settings-toggle input:checked + .toggle-slider::before {
+            transform: translateX(18px);
+        }
+
+        .settings-save-btn {
+            width: 100%;
+            background: linear-gradient(135deg, var(--accent1, #a8c7fa), var(--accent2, #9c27b0));
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            padding: 12px;
+            font-size: 14.5px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 6px;
+            transition: opacity 0.2s ease;
+        }
+        .settings-save-btn:hover { opacity: 0.88; }
+
+        /* ===== เพิ่มใหม่: CSS หน้า Login/Register overlay ===== */
+        .auth-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+            background: rgba(5, 2, 15, 0.92);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            /* ===== แก้ไข: เพิ่ม overflow-y:auto + padding แนวตั้ง เพื่อให้ scroll ได้เมื่อแป้นพิมพ์มือถือเด้งขึ้นมาบัง auth-card แทนที่จะโดนตัด/บังมองไม่เห็นช่อง input ===== */
+            overflow-y: auto;
+            padding: 24px 0;
+            box-sizing: border-box;
+        }
+        .auth-overlay.show { display: flex; }
+
+        .auth-card {
+            width: 90%;
+            max-width: 380px;
+            background: rgba(20, 12, 40, 0.95);
+            border: 1px solid rgba(168, 199, 250, 0.2);
+            border-radius: 24px;
+            padding: 32px 28px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.7), 0 0 40px rgba(156, 39, 176, 0.15);
+            animation: logoPopupIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+            /* ===== เพิ่มใหม่: กันไม่ให้การ์ด login สูงเกินจอตอนแป้นพิมพ์เด้ง (จะ scroll ข้างในแทน) ===== */
+            margin: auto;
+            flex-shrink: 0;
+        }
+
+        .auth-logo {
+            position: relative;
+            width: 72px; height: 72px;
+            border-radius: 50%;
+            margin: 0 auto 20px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px;
+        }
+        /* วงแสงหมุนรอบโลโก้ เหมือน sidebar */
+        .auth-logo::before {
+            content: "";
+            position: absolute;
+            width: 80px; height: 80px;
+            border-radius: 50%;
+            background: conic-gradient(from 0deg, #ffb4a2, #a8c7fa, #9c27b0, #ffb4a2);
+            filter: blur(1px);
+            animation: rotateLogo 3s linear infinite, sparklePulse 1s ease-in-out infinite alternate;
+            z-index: 0;
+        }
+        .auth-logo::after {
+            content: "";
+            position: absolute;
+            width: 74px; height: 74px;
+            border-radius: 50%;
+            background: rgba(168, 199, 250, 0.3);
+            filter: blur(8px);
+            animation: glowPulse 2s ease-in-out infinite;
+            z-index: 0;
+        }
+        .auth-logo-img {
+            width: 60px; height: 60px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid rgba(168, 199, 250, 0.3);
+            animation: rotateLogo 8s linear infinite;
+            position: relative;
+            z-index: 2;
+        }
+
+        .auth-title {
+            color: #f0eaff;
+            font-size: 20px;
+            font-weight: 600;
+            text-align: center;
+            margin-bottom: 6px;
+        }
+
+        .auth-subtitle {
+            color: #8a8597;
+            font-size: 13px;
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .auth-input {
+            width: 100%;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(168, 199, 250, 0.15);
+            border-radius: 12px;
+            padding: 11px 14px;
+            color: #f0eaff;
+            font-size: 16px;
+            outline: none;
+            margin-bottom: 12px;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+        .auth-input:focus { border-color: #a8c7fa; }
+        .auth-input::placeholder { color: #5a5570; }
+
+        .auth-btn {
+            width: 100%;
+            background: linear-gradient(135deg, var(--accent1, #a8c7fa), var(--accent2, #9c27b0));
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            padding: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 6px;
+            transition: opacity 0.2s;
+        }
+        .auth-btn:hover { opacity: 0.88; }
+        .auth-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .auth-switch {
+            text-align: center;
+            margin-top: 16px;
+            font-size: 13px;
+            color: #8a8597;
+        }
+        .auth-switch span {
+            color: #a8c7fa;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .auth-error {
+            background: rgba(231, 76, 60, 0.15);
+            border: 1px solid rgba(231, 76, 60, 0.3);
+            border-radius: 8px;
+            padding: 8px 12px;
+            color: #ff8a80;
+            font-size: 12.5px;
+            margin-bottom: 12px;
+            display: none;
+        }
+        .auth-error.show { display: block; }
+
+        /* ===== เพิ่มใหม่: CSS ส่วนแสดงชื่อผู้ใช้ที่ล็อกอินในหัว sidebar ===== */
+        .user-info-mini {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+        }
+        .user-email-mini {
+            font-size: 8px;
+            color: #8a8597;
+            max-width: 54px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            text-align: center;
+        }
+
+        /* ===== เพิ่มใหม่: CSS หน้าประวัติแชทและค้นหา ===== */
+        .history-overlay, .search-overlay {
+            display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 22; flex-direction: column;
+            background: rgba(5, 2, 15, 0.97); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            animation: fadeInUpgrade 0.3s ease;
+        }
+        .history-overlay.show, .search-overlay.show { display: flex; }
+        .history-header, .search-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; border-bottom: 1px solid rgba(255,255,255,0.08); flex-shrink: 0; }
+        .history-header h2, .search-header h2 { color: #f0eaff; font-size: 18px; }
+        .history-close-btn, .search-close-btn { background: rgba(255,255,255,0.06); border: none; color: #c4c7c5; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 14px; }
+        .history-close-btn:hover, .search-close-btn:hover { background: rgba(255,255,255,0.15); }
+        .history-body, .search-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+        .history-body::-webkit-scrollbar, .search-body::-webkit-scrollbar { width: 6px; }
+        .history-body::-webkit-scrollbar-thumb, .search-body::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+        .chat-session-card { background: rgba(38, 26, 64, 0.6); border: 1px solid rgba(168, 199, 250, 0.1); border-radius: 14px; padding: 14px 16px; margin-bottom: 10px; cursor: pointer; transition: background 0.2s, border-color 0.2s; display: flex; align-items: center; gap: 10px; }
+        .chat-session-card:hover { background: rgba(60, 40, 100, 0.7); border-color: rgba(168, 199, 250, 0.25); }
+        .session-info { flex: 1; min-width: 0; }
+        .session-title { color: #e0d8f0; font-size: 14px; font-weight: 500; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .session-meta { color: #7a7590; font-size: 12px; }
+        .session-delete-btn { background: none; border: none; color: #e74c3c; font-size: 18px; cursor: pointer; padding: 0 4px; opacity: 0.5; flex-shrink: 0; }
+        .session-delete-btn:hover { opacity: 1; }
+        .history-empty { text-align: center; color: #5a5570; margin-top: 60px; font-size: 15px; line-height: 2; }
+        .search-input-wrap { padding: 14px 20px; flex-shrink: 0; }
+        .search-input-box { width: 100%; background: rgba(38, 26, 64, 0.75); border: 1px solid rgba(168, 199, 250, 0.2); border-radius: 16px; padding: 12px 18px; color: #f0eaff; font-size: 16px; outline: none; box-sizing: border-box; }
+        .search-input-box:focus { border-color: #a8c7fa; }
+        .search-input-box::placeholder { color: #5a5570; }
+        .search-result-msg { color: #8a8597; font-size: 13px; padding: 4px 0 10px; }
+        .search-highlight { background: rgba(168, 199, 250, 0.25); border-radius: 3px; padding: 0 2px; }
+        .new-chat-btn { width: 100%; background: rgba(168,199,250,0.1); border: 1px dashed rgba(168,199,250,0.3); border-radius: 14px; padding: 14px; color: #a8c7fa; font-size: 14px; cursor: pointer; margin-bottom: 14px; transition: background 0.2s; }
+        .new-chat-btn:hover { background: rgba(168,199,250,0.2); }
+    </style>
+</head>
+<body>
+    <div class="sidebar-wrapper">
+    <button class="sidebar-toggle-btn" id="sidebarToggleBtn" onclick="toggleSidebar()" title="เมนู">☰</button>
+    <!-- ===== เพิ่มใหม่: แถบโปร่งใสชิดขอบซ้ายจอ ดักเมาส์ชี้บนคอมเพื่อเด้ง sidebar ออกมาอัตโนมัติ (ไม่มีผลบนมือถือ) ===== -->
+    <div class="sidebar-hover-zone"></div>
+    <div class="icon-sidebar" id="iconSidebar">
+        <div class="top-icons">
+            <!-- ===== แก้ไข: เปลี่ยน onclick จาก location.reload() เป็น showLogoPopup() เพื่อเปิดรูปโลโก้ขนาดใหญ่กลางจอแทนการรีโหลดหน้า ===== -->
+            <div class="logo-container" onclick="showLogoPopup()">
+                <!-- ===== แก้ไข: เปลี่ยน onerror จากซ่อนรูป เป็นแสดงวงกลม gradient fallback แทนไอคอนแตก (เผื่อไฟล์ ETC.png เสีย/เปิดไม่ได้) ===== -->
+                <img src="img/ETC.png" alt="ETC Logo" class="logo-spin" onerror="this.onerror=null; this.removeAttribute('src'); this.classList.add('logo-fallback');">
+            </div>
+            <!-- ===== แก้ไข: เปลี่ยน emoji 3 อันให้สื่อถึงอิเล็กทรอนิกส์ ===== -->
+            <div class="menu-icon electronic-icon" onclick="location.reload()" title="เริ่มแชทใหม่">⚡</div>
+            <!-- ===== แก้ไข: 🔬 → เปิดหน้าค้นหาประวัติแชท ===== -->
+            <div class="menu-icon electronic-icon" onclick="showSearchPage()" title="ค้นหาประวัติแชท">🔬</div>
+            <!-- ===== แก้ไข: 💾 → เปิดหน้าประวัติแชท ===== -->
+            <div class="menu-icon electronic-icon" onclick="showHistoryPage()" title="ประวัติแชท">💾</div>
+        </div>
+        <div class="bottom-icons">
+            <!-- ===== แก้ไข: เพิ่ม onclick ให้ไอคอนตั้งค่าเปิดหน้า Settings และเปลี่ยน "ME" เป็น id แบบไดนามิก เพื่ออัปเดตชื่อ/รูปตามที่ผู้ใช้ตั้งค่า ===== -->
+            <div class="menu-icon electronic-icon" onclick="showSettingsPage()" title="ตั้งค่า">⚙</div>
+            <div class="menu-icon" id="profileAvatarBtn" onclick="showSettingsPage()" style="background:#ffb4a2; color:#333; cursor:pointer;">ME</div>
+        </div>
+    </div>
+    </div>
+
+    <div class="main-container">
+        <div id="stars-layer"></div>
+        <!-- ===== แก้ไข: เปลี่ยนปุ่มอัปเกรดจาก link ไปไฟล์อื่น เป็นเรียก showUpgradePage() เพื่อสลับหน้าภายในไฟล์เดียวกัน ===== -->
+        <div class="header-top"><button class="upgrade-btn" onclick="showUpgradePage()">✨ อัปเกรด</button></div>
+        
+        <div class="hero-section" id="heroSection">
+            <div id="welcomeContainer">
+                <h1 id="centerTitle">สวัสดีค่ะ มีอะไรให้ ETC ช่วยดูแลไหมคะ?</h1>
+            </div>
+
+            <div id="inputWrapper" class="bottom-input-container" style="flex-direction:column; align-items:center; gap:8px;">
+                <!-- ===== เพิ่มใหม่: กล่องพรีวิวรูปที่เลือกไว้ก่อนกดส่ง (ซ่อนไว้เป็นค่าเริ่มต้น) ===== -->
+                <div id="imagePreviewBox" style="display:none; max-width:760px; width:100%; padding:0 4px;">
+                    <div style="position:relative; display:inline-block;">
+                        <img id="imagePreviewThumb" style="max-height:70px; border-radius:12px; border:1px solid rgba(168,199,250,0.3);">
+                        <button onclick="clearImageAttachment()" style="position:absolute; top:-8px; right:-8px; width:22px; height:22px; border-radius:50%; background:#e74c3c; color:#fff; border:none; cursor:pointer; font-size:12px;">✕</button>
+                    </div>
+                </div>
+                <div class="gemini-input-box">
+                    <!-- ===== เพิ่มใหม่: ปุ่มแนบรูปภาพ ให้ AI (qwen3.6-27b) ดูภาพและวิเคราะห์ได้ ===== -->
+                    <input type="file" id="imageFileInput" accept="image/*" style="display:none" onchange="handleImageAttach(event)">
+                    <button class="send-arrow-btn" onclick="document.getElementById('imageFileInput').click()" title="แนบรูปภาพให้ ETC ดู">📷</button>
+                    <!-- ===== เพิ่มใหม่: ปุ่มเปิดกล้องสด ถ่ายรูปแล้วดูตัวอย่างก่อนส่งให้ ETC ดู (ต่างจากปุ่ม 📷 ที่เลือกไฟล์ที่มีอยู่แล้ว) ===== -->
+                    <button class="send-arrow-btn" onclick="openCameraModal()" title="ถ่ายรูปสดส่งให้ ETC ดู">📸</button>
+                    <!-- ===== แก้ไข: เพิ่ม autocomplete="off" และ name แบบสุ่ม เพื่อปิดการจำคำที่เคยพิมพ์ของเบราว์เซอร์ (popup "Saved info") ===== -->
+                    <input type="text" id="userInputText" name="etc-chat-input-no-save" autocomplete="off" placeholder="พิมพ์ข้อความที่นี่..." onkeypress="if(event.key==='Enter') handleSendAction()">
+                    <!-- ===== เพิ่มใหม่: ปุ่มไมโครโฟนพิมพ์ด้วยเสียง ซ่อนไว้เป็นค่าเริ่มต้น (โชว์เมื่อเปิดสวิตช์ในหน้าตั้งค่า) ===== -->
+                    <button class="send-arrow-btn" id="micBtn" onclick="toggleDictation()" style="display:none;" title="พูดแทนพิมพ์">🎙️</button>
+                    <button class="send-arrow-btn" id="actionBtn" onclick="handleSendAction()">➔</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="chat-view" id="chatWindow"></div>
+
+        <!-- ===== เพิ่มใหม่: หน้าอัปเกรด ซ่อนไว้ก่อนด้วย display:none ใช้ JS สลับแสดง/ซ่อนแทนการเปลี่ยนไฟล์ ===== -->
+        <div id="upgradePage" class="upgrade-overlay">
+            <button class="back-btn" onclick="hideUpgradePage()">← กลับไปหน้าแชท</button>
+            <div class="icon-glow">✨</div>
+            <h1 class="upgrade-title">อัปเกรดเป็น ETC Pro</h1>
+            <p class="upgrade-subtitle">
+                ฟีเจอร์ระดับพรีเมียมกำลังอยู่ระหว่างการพัฒนา
+                เร็วๆ นี้คุณจะได้พบกับความสามารถใหม่ๆ ที่ทรงพลังยิ่งขึ้นค่ะ
+            </p>
+            <div class="status-card">
+                <span class="status-card-dot"></span>
+                <span>กำลังพัฒนา — เร็วๆ นี้</span>
+            </div>
+        </div>
+
+        <!-- ===== เพิ่มใหม่: หน้าตั้งค่า (Settings) สไตล์คล้าย ChatGPT พร้อมโปรไฟล์ผู้ใช้ที่ตั้งค่าเองได้ ===== -->
+        <div id="settingsPage" class="settings-overlay">
+            <div class="settings-panel wide">
+                <div class="settings-header">
+                    <h2>การตั้งค่า</h2>
+                    <button class="settings-close-btn" onclick="hideSettingsPage()">✕</button>
+                </div>
+
+                <div class="settings-layout">
+                    <!-- ===== เพิ่มใหม่: เมนูซ้ายแยกหมวดหมู่ เหมือนหน้าตั้งค่า ChatGPT ===== -->
+                    <div class="settings-nav">
+                        <button class="settings-nav-item active" id="navBtn-general" onclick="showSettingsTab('general')">⚙️ ทั่วไป</button>
+                        <button class="settings-nav-item" id="navBtn-voice" onclick="showSettingsTab('voice')">🔊 เสียง</button>
+                        <button class="settings-nav-item" id="navBtn-account" onclick="showSettingsTab('account')">👤 บัญชี</button>
+                    </div>
+
+                    <div class="settings-content">
+                        <!-- ===== แท็บ: ทั่วไป ===== -->
+                        <div class="settings-tab" id="tab-general">
+                            <div class="profile-card">
+                                <div class="profile-avatar-large" id="profileAvatarLarge" onclick="document.getElementById('avatarFileInput').click()">ME</div>
+                                <input type="file" id="avatarFileInput" accept="image/*" style="display:none" onchange="handleAvatarUpload(event)">
+                                <div class="profile-info">
+                                    <input type="text" id="profileNameInput" class="profile-name-input" placeholder="ตั้งชื่อผู้ใช้ของคุณ" maxlength="20" autocomplete="off">
+                                    <p class="profile-hint">แตะที่รูปวงกลมเพื่ออัปโหลดรูปโปรไฟล์ค่ะ</p>
+                                </div>
+                            </div>
+
+                            <div class="settings-divider"></div>
+
+                            <!-- ===== เพิ่มใหม่: เลือกสีธีมของแอป (Accent color) ใช้งานได้จริง เปลี่ยนสีปุ่ม/อวตาร์/บับเบิลข้อความทันที ===== -->
+                            <div class="settings-row" style="flex-direction:column; align-items:flex-start; gap:8px;">
+                                <span>🎨 สีธีม (Accent color)</span>
+                                <div class="accent-swatch-row" id="accentSwatchRow"></div>
+                            </div>
+
+                            <div class="settings-divider"></div>
+
+                            <!-- ===== เพิ่มใหม่: ระบบคิดละเอียด (Advanced reasoning) ผูกกับ reasoning_effort จริงของ Groq ===== -->
+                            <div class="settings-row">
+                                <span>🧠 ระบบคิดละเอียด (ตอบช้าลงแต่วิเคราะห์ลึกขึ้น)</span>
+                                <label class="settings-toggle">
+                                    <input type="checkbox" id="deepThinkToggle" onchange="handleDeepThinkChange()">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+
+                            <!-- ===== เพิ่มใหม่: เปิด/ปิดปุ่มพิมพ์ด้วยเสียง (ป้อนตามคำบอก) ===== -->
+                            <div class="settings-row">
+                                <span>🎙️ เปิดใช้การป้อนด้วยเสียง (พูดแทนพิมพ์)</span>
+                                <label class="settings-toggle">
+                                    <input type="checkbox" id="dictationToggle" onchange="handleDictationToggleChange()">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+
+                            <!-- ===== เพิ่มใหม่: ปรับขนาดตัวอักษรในกล่องแชท ใช้งานได้จริง (เปลี่ยนขนาดตัวอักษรทั้งแอปทันที) ===== -->
+                            <div class="settings-row">
+                                <span>🔤 ขนาดตัวอักษรในแชท</span>
+                                <select class="settings-select" id="fontSizeSelect" onchange="handleFontSizeChange()">
+                                    <option value="14">เล็ก</option>
+                                    <option value="16" selected>กลาง</option>
+                                    <option value="19">ใหญ่</option>
+                                </select>
+                            </div>
+
+                            <!-- ===== เพิ่มใหม่: ระดับความคิดสร้างสรรค์ในการตอบ (ผูกกับค่า temperature จริงที่ส่งไป Groq) ===== -->
+                            <div class="settings-row" style="flex-direction:column; align-items:flex-start; gap:8px;">
+                                <span>🎨 ความคิดสร้างสรรค์ในการตอบ: <b id="creativityLabel">สมดุล</b></span>
+                                <input type="range" id="creativitySlider" min="0.3" max="0.9" step="0.1" value="0.7" style="width:100%;" oninput="handleCreativityChange()">
+                                <p class="profile-hint">ค่าต่ำ = ตอบตรงไปตรงมา แม่นยำ | ค่าสูง = ตอบมีสีสัน สร้างสรรค์กว่า</p>
+                            </div>
+
+                            <div class="settings-divider"></div>
+
+                            <!-- ===== เพิ่มใหม่: ปุ่มลบประวัติแชททั้งหมดในคลิกเดียว ใช้งานได้จริง (ลบจริงใน Firestore) ===== -->
+                            <button class="ngrok-save-btn" onclick="handleDeleteAllHistory()" style="width:100%; text-align:center; color:#ff8a80; border-color:rgba(231,76,60,0.3);">🗑️ ลบประวัติแชททั้งหมด</button>
+
+                            <div class="settings-divider"></div>
+                            <button class="settings-save-btn" onclick="saveProfileSettings()">บันทึกการตั้งค่า</button>
+                        </div>
+
+                        <!-- ===== แท็บ: เสียง ===== -->
+                        <div class="settings-tab" id="tab-voice" style="display:none;">
+                            <div class="settings-row">
+                                <span>🔊 เสียงตอบกลับ (อ่านคำตอบออกเสียง)</span>
+                                <label class="settings-toggle">
+                                    <input type="checkbox" id="soundToggle" onchange="handleSoundToggleChange()">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+
+                            <!-- ===== เพิ่มใหม่: เลือกเสียงพูดจริงจากเครื่อง กันปัญหาเสียงกลายเป็นภาษาอังกฤษ ===== -->
+                            <div class="settings-row" style="flex-direction:column; align-items:flex-start; gap:8px;">
+                                <span>🗣️ เลือกเสียงพูด</span>
+                                <select class="settings-select" id="voiceSelect" style="width:100%;" onchange="handleVoiceChange()">
+                                    <option value="">กำลังโหลดรายชื่อเสียง...</option>
+                                </select>
+                                <p class="profile-hint" id="voiceHint"></p>
+                                <p class="profile-hint" style="line-height:1.6;">
+                                    ถ้าไม่มีเสียงไทยให้เลือก: บนมือถือ Android ไปที่ การตั้งค่า → ระบบ → ภาษาและการป้อนข้อมูล → เอาต์พุตข้อความเป็นเสียงพูด → ติดตั้งเสียงภาษาไทย
+                                    ส่วนบนคอม Windows ไปที่ การตั้งค่า → เวลาและภาษา → เสียงพูด → เพิ่มเสียง → เลือกภาษาไทย
+                                </p>
+                            </div>
+
+                            <div class="settings-row" style="flex-direction:column; align-items:flex-start; gap:8px;">
+                                <span>⏩ ความเร็วเสียงพูด: <b id="voiceRateLabel">1.0x</b></span>
+                                <input type="range" id="voiceRateSlider" min="0.5" max="1.8" step="0.1" value="1" style="width:100%;" oninput="handleVoiceRateChange()">
+                            </div>
+
+                            <button class="ngrok-save-btn" onclick="speakText('สวัสดีค่ะ นี่คือตัวอย่างเสียงของ ETC ค่ะ')" style="width:100%; margin-top:4px; text-align:center;">🔊 ทดสอบเสียง</button>
+                        </div>
+
+                        <!-- ===== แท็บ: บัญชี ===== -->
+                        <div class="settings-tab" id="tab-account" style="display:none;">
+                            <div class="settings-row">
+                                <span>📧 อีเมลที่เข้าสู่ระบบ</span>
+                                <span id="accountEmailDisplay" style="color:#8a8597; font-size:13px;">-</span>
+                            </div>
+                            <div class="settings-divider"></div>
+                            <!-- ===== เพิ่มใหม่: ปุ่มรีเซ็ตรหัสผ่านจริง ผ่าน Firebase (ส่งลิงก์ไปที่อีเมล) ===== -->
+                            <p class="profile-hint" style="margin-bottom:10px;">ระบบจะส่งลิงก์สำหรับตั้งรหัสผ่านใหม่ไปที่อีเมลของคุณค่ะ</p>
+                            <button class="ngrok-save-btn" onclick="handlePasswordReset()" style="width:100%; text-align:center;">🔑 ส่งอีเมลรีเซ็ตรหัสผ่าน</button>
+                            <div class="settings-divider"></div>
+                            <button class="settings-save-btn" onclick="handleLogout()" style="background:rgba(231,76,60,0.3);border:1px solid rgba(231,76,60,0.4);">ออกจากระบบ</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== เพิ่มใหม่: popup แสดงรูปโลโก้ขนาดใหญ่กลางจอ เมื่อกดที่โลโก้หมุนซ้ายบน ===== -->
+        <!-- ===== เพิ่มใหม่: หน้าประวัติแชท ===== -->
+        <div id="historyPage" class="history-overlay">
+            <div class="history-header">
+                <h2>💾 ประวัติแชท</h2>
+                <button class="history-close-btn" onclick="hideHistoryPage()">✕</button>
+            </div>
+            <div class="history-body" id="historyBody">
+                <button class="new-chat-btn" onclick="startNewChat()">+ เริ่มแชทใหม่</button>
+                <div id="historyList"></div>
+            </div>
+        </div>
+
+        <!-- ===== เพิ่มใหม่: หน้าค้นหาประวัติแชท ===== -->
+        <div id="searchPage" class="search-overlay">
+            <div class="search-header">
+                <h2>🔬 ค้นหาประวัติแชท</h2>
+                <button class="search-close-btn" onclick="hideSearchPage()">✕</button>
+            </div>
+            <div class="search-input-wrap">
+                <input type="text" class="search-input-box" id="searchInput" placeholder="พิมพ์คำที่ต้องการค้นหา..." oninput="handleSearch(this.value)" autocomplete="off">
+            </div>
+            <div class="search-body" id="searchBody">
+                <div class="history-empty">พิมพ์คำค้นหาด้านบนค่ะ</div>
+            </div>
+        </div>
+
+        <div id="logoPopup" class="logo-popup-overlay" onclick="hideLogoPopup()">
+            <img src="img/ETC.png" alt="ETC Logo Large" class="logo-popup-img" onerror="this.onerror=null; this.style.display='none';">
+        </div>
+
+        <!-- ===== เพิ่มใหม่: หน้าต่างกล้องสด สำหรับถ่ายรูปแล้วดูตัวอย่างก่อนส่งให้ ETC ===== -->
+        <div id="cameraModal" class="camera-modal-overlay">
+            <div class="camera-modal-box">
+                <video id="cameraVideo" autoplay playsinline muted></video>
+                <img id="cameraShotImg" class="camera-shot" style="display:none;">
+                <canvas id="cameraCanvas" style="display:none;"></canvas>
+                <div class="camera-status-text" id="cameraStatusText"></div>
+                <div class="camera-controls">
+                    <button class="camera-btn danger" onclick="closeCameraModal()">✕ ปิด</button>
+                    <button class="camera-btn primary" id="cameraCaptureBtn" onclick="capturePhoto()">📸 ถ่ายรูป</button>
+                    <button class="camera-btn" id="cameraRetakeBtn" onclick="retakePhoto()" style="display:none;">↺ ถ่ายใหม่</button>
+                    <button class="camera-btn primary" id="cameraUseBtn" onclick="useCapturedPhoto()" style="display:none;">✓ ใช้รูปนี้</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== แก้ไข: ลบ show ออก ให้ Firebase เช็ค session ก่อนค่อยแสดง Login ===== -->
+    <!-- Loading screen แสดงระหว่าง Firebase เช็ค session -->
+    <div id="loadingScreen" style="position:fixed;top:0;left:0;right:0;bottom:0;background:#050210;z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;">
+        <div style="position:relative;width:72px;height:72px;display:flex;align-items:center;justify-content:center;">
+            <div style="position:absolute;width:80px;height:80px;border-radius:50%;background:conic-gradient(from 0deg,#ffb4a2,#a8c7fa,#9c27b0,#ffb4a2);filter:blur(1px);animation:rotateLogo 3s linear infinite;"></div>
+            <img src="img/ETC.png" style="width:60px;height:60px;border-radius:50%;object-fit:cover;border:2px solid rgba(168,199,250,0.3);animation:rotateLogo 8s linear infinite;position:relative;z-index:2;" onerror="this.style.display='none'">
+        </div>
+        <div style="color:#8a8597;font-size:13px;">กำลังโหลด...</div>
+    </div>
+
+    <div id="authOverlay" class="auth-overlay">
+        <div class="auth-card">
+            <!-- ===== แก้ไข: เปลี่ยนจาก emoji 🤖 เป็นรูปโลโก้ ETC.png พร้อม animation หมุนและเรืองแสงเหมือน sidebar ===== -->
+            <div class="auth-logo">
+                <img src="img/ETC.png" alt="ETC Logo" class="auth-logo-img" onerror="this.onerror=null; this.style.display='none'; this.parentElement.textContent='ETC';">
+            </div>
+            <div class="auth-title" id="authTitle">เข้าสู่ระบบ</div>
+            <div class="auth-subtitle" id="authSubtitle">เข้าสู่ระบบเพื่อใช้งาน ETC AI</div>
+            <div class="auth-error" id="authError"></div>
+            <!-- ===== แก้ไข: เปลี่ยนเป็น type=text เพื่อให้แป้นพิมพ์ภาษาไทยบนมือถือทำงานได้ปกติ ===== -->
+            <input type="text" class="auth-input" id="authName" placeholder="ชื่อของคุณ (ภาษาไทยได้เลยค่ะ)" autocomplete="off" lang="th" style="display:none">
+            <input type="text" class="auth-input" id="authEmail" placeholder="อีเมล เช่น example@gmail.com" autocomplete="off" inputmode="email">
+            <input type="password" class="auth-input" id="authPassword" placeholder="รหัสผ่าน (อย่างน้อย 6 ตัว)" autocomplete="off">
+            <button class="auth-btn" id="authSubmitBtn" onclick="handleAuthSubmit()">เข้าสู่ระบบ</button>
+
+            <!-- ===== เพิ่มใหม่: ปุ่มเข้าสู่ระบบด้วย Google เพื่อให้ได้รูปโปรไฟล์มาอัตโนมัติจากบัญชี Google (ระบบเดิมใช้อีเมล+รหัสผ่านล้วน ไม่มีรูปมาให้) ===== -->
+            <div style="display:flex; align-items:center; gap:10px; margin:16px 0;">
+                <div style="flex:1; height:1px; background:rgba(255,255,255,0.1);"></div>
+                <span style="color:#5a5570; font-size:12px;">หรือ</span>
+                <div style="flex:1; height:1px; background:rgba(255,255,255,0.1);"></div>
+            </div>
+            <button class="auth-btn" id="googleSignInBtn" onclick="handleGoogleSignIn()" style="background:#fff; color:#3c4043; display:flex; align-items:center; justify-content:center; gap:10px;">
+                <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.87 2.7-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.98v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.66 9c0-.59.1-1.17.29-1.7V4.97H.98A9 9 0 0 0 0 9c0 1.45.35 2.83.98 4.03l2.97-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .98 4.97L3.95 7.3C4.66 5.17 6.65 3.58 9 3.58z"/></svg>
+                เข้าสู่ระบบด้วย Google
+            </button>
+
+            <div class="auth-switch" id="authSwitch">
+                ยังไม่มีบัญชี? <span onclick="switchToRegister()">สมัครสมาชิก</span>
+            </div>
+        </div>
+    </div>
+
+        <script>
+        // ============================================================
+        // ตัวแปรหลัก
+        // ============================================================
+        // ===== แก้ไข: เอา now/today/timeNow ที่คำนวณครั้งเดียวตอนโหลดหน้าออก
+        // เพราะทำให้วันเวลาที่ AI รู้ค้างอยู่ที่ตอนเปิดหน้าเว็บตลอดไป ไม่อัปเดตแม้จะคุยข้ามวันข้ามเวลาไปแล้ว
+        // ย้ายไปคำนวณใหม่ทุกครั้งที่ส่งข้อความแทน (ดูฟังก์ชัน buildRequestMessages ด้านล่าง) =====
+
+        // ===== แก้ไข: เอาวันที่/เวลาที่ฝังตายตัว (${today}/${timeNow}) ออกจาก system prompt
+        // และเพิ่มกฎข้อ 6 ห้ามทักทายซ้ำทุกข้อความ (เดิมกฎข้อ 1 เขียนกว้างเกินไป โมเดลเลยทักทายทุกครั้งที่ตอบ) =====
+        let chatHistory = [{ role: "system", content: `คุณคือ ETC เลขาสาวผู้ชาญฉลาด เพศหญิง คุณมีความเชี่ยวชาญพิเศษด้านวิทยาศาสตร์และอิเล็กทรอนิกส์ แต่คุณสามารถตอบคำถามทั่วไป ประวัติศาสตร์ หรือเรื่องอื่นๆ ได้อย่างครบถ้วนและสุภาพ | กฎ: 1. ตอบให้ครบถ้วนละเอียด ไม่สั้นห้วนจนเกินไป ถ้าเหมาะสมให้ยกตัวอย่างประกอบหรือแนะนำเรื่องที่เกี่ยวข้องเพิ่มเติมท้ายคำตอบด้วย | 2. ห้ามพูดถึงวันที่/เวลาเองเด็ดขาด ยกเว้นถูกถามตรงๆ ให้ใช้ข้อมูลวันที่/เวลาปัจจุบันที่ระบบแจ้งให้ในข้อความ system ล่าสุดเท่านั้น ห้ามเดาหรือจำวันที่เก่าจากตอนต้นบทสนทนา | 3. วิทยาศาสตร์/อิเล็กทรอนิกส์ตอบเชี่ยวชาญ | 4. ลงท้ายด้วย ค่ะ เสมอ | 5. ห้ามใช้ ครับ ผม เด็ดขาด | 6. ทักทาย (เช่น สวัสดีค่ะ) ได้เฉพาะข้อความแรกสุดของบทสนทนาเท่านั้น ข้อความถัดๆไปห้ามทักทายซ้ำอีก ให้ตอบเข้าประเด็นคำถามได้เลย | 7. ห้ามพูดคำหรือวลีเดิมซ้ำๆวนไปมาเด็ดขาด ถ้าตอบยาวให้เรียบเรียงเนื้อหาใหม่ทุกประโยค ห้ามคัดลอกรูปแบบประโยคเดิมซ้ำ | 8. กฎภาษาสำคัญที่สุด: ตอบเป็นภาษาไทยล้วนเป็นหลักเสมอ (ประโยค ไวยากรณ์ คำเชื่อม ต้องเป็นไทยทั้งหมด) ห้ามแทรกคำหรืออักษรภาษาจีน ญี่ปุ่น เกาหลี เวียดนาม หรือภาษาอื่นใดที่ไม่ใช่ไทย/อังกฤษโดยเด็ดขาด ไม่ว่ากรณีใดก็ตาม | อนุญาตให้ใช้คำภาษาอังกฤษได้เฉพาะกรณีต่อไปนี้เท่านั้น: (ก) ชื่อเฉพาะสากล เช่น ชื่อคน ชื่อบริษัท ชื่อโปรแกรม ชื่อสถานที่ (ข) ศัพท์เทคนิคด้านวิทยาศาสตร์/อิเล็กทรอนิกส์/คอมพิวเตอร์ที่ไม่มีคำแปลไทยที่ใช้กันทั่วไป เช่น Wi-Fi, Bluetooth, CPU, transistor, API (ค) หน่วยวัดสากล เช่น V, A, Hz, GB | ถ้าคำไหนมีคำแปลไทยที่ใช้กันทั่วไปอยู่แล้ว ต้องใช้คำไทยเสมอ ห้ามใช้คำอังกฤษแทนโดยไม่จำเป็น เช่น ใช้ "คอมพิวเตอร์" ไม่ใช่ "computer", ใช้ "ตัวอย่างเช่น" ไม่ใช่ "for example" | ก่อนตอบทุกครั้ง ให้ตรวจทานคำตอบของตัวเองว่ามีคำที่ไม่ใช่ไทยหรืออังกฤษหลุดเข้ามาหรือไม่ ถ้ามีให้แก้เป็นภาษาไทยก่อนส่งคำตอบ` }];
+
+        // ===== เพิ่มใหม่: ฟังก์ชันคำนวณวันที่/เวลาปัจจุบัน "สดใหม่" ทุกครั้งที่เรียก (ไม่ใช่ค่าคงที่ตอนโหลดหน้า) =====
+        function getCurrentDateTimeSystemMessage() {
+            const now = new Date();
+            const today = now.toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            const timeNow = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+            return { role: "system", content: `[ข้อมูลปัจจุบันจริง ใช้ตอบเฉพาะเมื่อถูกถามเรื่องวันที่/เวลาโดยตรงเท่านั้น] วันนี้คือ${today} เวลา ${timeNow} น.` };
+        }
+
+        // ===== เพิ่มใหม่: ประกอบ messages ที่จะส่งไป API โดยแทรกวันเวลาปัจจุบันสดใหม่เข้าไปทุกครั้ง
+        // โดยไม่บันทึกข้อความนี้ถาวรลงใน chatHistory (กัน "วันเวลาเก่า" สะสมค้างอยู่ในประวัติแชท) =====
+        function buildRequestMessages() {
+            return [chatHistory[0], getCurrentDateTimeSystemMessage(), ...chatHistory.slice(1)];
+        }
+
+        // ============================================================
+        // ระบบเตือน "แชทนี้ยาวเกินไปแล้ว" — ช่วยกันปัญหาบันทึกลง Firestore ไม่ได้ (จำกัด 1MB/session)
+        // และช่วยให้ AI ตอบได้แม่นยำขึ้น (บทสนทนายาวเกินไปทำให้ AI เริ่มสับสนบริบทเก่า)
+        // ============================================================
+        function estimateChatLength() {
+            // รวมความยาวตัวอักษรของทุกข้อความในประวัติแชท (ไม่รวม system prompt แรกสุด)
+            return chatHistory.slice(1).reduce((sum, m) => sum + (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length), 0);
+        }
+        function checkChatLengthAndWarn() {
+            if (hasWarnedThisChat) return; // เตือนแค่ครั้งเดียวต่อแชท กันขึ้นซ้ำรก
+            if (estimateChatLength() < CHAT_LENGTH_WARNING_THRESHOLD) return;
+            hasWarnedThisChat = true;
+            const cw = document.getElementById("chatWindow");
+            cw.insertAdjacentHTML('beforeend', `
+                <div class="chat-length-warning">
+                    <span>💬 แชทนี้เริ่มยาวมากแล้วค่ะ แนะนำให้เริ่มแชทใหม่เพื่อให้ ETC ตอบได้แม่นยำและลื่นไหลขึ้นนะคะ</span>
+                    <button onclick="startNewChat()">+ เริ่มแชทใหม่</button>
+                </div>
+            `);
+            cw.scrollTop = cw.scrollHeight;
+        }
+
+        let currentController = null;
+        let isAiThinking = false;
+        let isFirstMessage = true;
+        // ===== เพิ่มใหม่: ตัวแปรควบคุมระบบเตือน "แชทนี้ยาวเกินไปแล้ว"
+        // hasWarnedThisChat กันไม่ให้เตือนซ้ำๆทุกข้อความหลังจากเตือนไปแล้วครั้งหนึ่งในแชทเดียวกัน =====
+        let hasWarnedThisChat = false;
+        // จำกัดความยาวรวมของบทสนทนา (ตัวอักษร) ก่อนจะเตือน — ตั้งไว้ที่ 50,000 ตัวอักษร
+        // เป็นระยะกันชนที่ปลอดภัย ทั้งเรื่องคุณภาพคำตอบของ AI (บทสนทนายาวเกินไปทำให้ AI เริ่มหลุดโฟกัส/สับสนบริบทเก่า)
+        // และเรื่องขีดจำกัดขนาดเอกสารของ Firestore ที่เก็บประวัติแชท (สูงสุด 1MB ต่อ session ถ้าแชทยาวเกินไปอาจบันทึกไม่ได้)
+        const CHAT_LENGTH_WARNING_THRESHOLD = 50000;
+        let userProfile = { name: "ME", avatarDataUrl: null };
+        let currentUserId = null;
+        let currentSessionId = null;
+        let allSessions = [];
+        let authMode = "login";
+
+        // ===== แก้ไข: ลบตัวแปร currentNgrokUrl ออก เพราะเลิกใช้ LM Studio + ngrok แล้ว =====
+        // ===== เปลี่ยนไปเรียก /api/chat ของเราเอง ซึ่งจะไปเชื่อมกับ Groq (โมเดล qwen/qwen3.6-27b) แทน =====
+        // ===== ข้อดี: ไม่ต้องเปิดคอมทิ้งไว้ตลอด แชทได้ตลอด 24 ชม. ฟรี =====
+
+        // ============================================================
+        // Firebase — init ครั้งเดียว
+        // ============================================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyBdVitJFjMx0xFwnGvkdf0vknS5q8SbOGM",
+            authDomain: "etc-ai-f54c4.firebaseapp.com",
+            projectId: "etc-ai-f54c4",
+            storageBucket: "etc-ai-f54c4.firebasestorage.app",
+            messagingSenderId: "714602902903",
+            appId: "1:714602902903:web:ff47afbc4167fec7a3dd72"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        // ============================================================
+        // Loading / Auth State — onAuthStateChanged ครั้งเดียว
+        // ============================================================
+        auth.onAuthStateChanged(async (user) => {
+            const loading = document.getElementById("loadingScreen");
+            const authOverlay = document.getElementById("authOverlay");
+            if (user) {
+                currentUserId = user.uid;
+                syncProfileFromFirebase(user);
+                try {
+                    await loadAllSessions(user.uid);
+                    await createNewSession(user.uid);
+                } catch(e) { console.log("Firestore init error:", e); }
+                authOverlay.classList.remove("show");
+            } else {
+                currentUserId = null;
+                currentSessionId = null;
+                authOverlay.classList.add("show");
+            }
+            if (loading) loading.style.display = "none";
+        });
+
+        // ============================================================
+        // Profile
+        // ============================================================
+        function loadUserProfile() {
+            try {
+                const s = localStorage.getItem("etc_user_profile");
+                if (s) userProfile = JSON.parse(s);
+            } catch(e) {}
+        }
+
+        // ============================================================
+        // เสียงตอบกลับ (Text-to-Speech) — ใช้ Web Speech API ของเบราว์เซอร์เอง ไม่ต้องพึ่ง API ภายนอก ฟรี 100%
+        // ============================================================
+        // ===== เพิ่มใหม่: โหลดค่าที่เคยตั้งไว้ (เปิด/ปิดเสียง) จาก localStorage มาตั้งค่า checkbox ตอนเปิดหน้าเว็บ =====
+        function loadSoundSetting() {
+            try {
+                const saved = localStorage.getItem("etc_sound_enabled");
+                const toggle = document.getElementById("soundToggle");
+                if (toggle) toggle.checked = saved === "true";
+            } catch(e) {}
+        }
+
+        // ===== เพิ่มใหม่: บันทึกค่าเปิด/ปิดเสียงทันทีที่ผู้ใช้กดสวิตช์ (ไม่ต้องรอกด "บันทึกการตั้งค่า") =====
+        function handleSoundToggleChange() {
+            const enabled = document.getElementById("soundToggle").checked;
+            try { localStorage.setItem("etc_sound_enabled", enabled); } catch(e) {}
+            // ถ้าปิดเสียงระหว่างที่กำลังพูดอยู่ ให้หยุดพูดทันที
+            if (!enabled && "speechSynthesis" in window) window.speechSynthesis.cancel();
+        }
+
+        // ===== เพิ่มใหม่ (แก้บั๊กเสียงเป็นอังกฤษ): โหลดรายชื่อเสียงพูดที่ "มีอยู่จริงในเครื่อง/เบราว์เซอร์" มาให้เลือก
+        // สาเหตุเดิมที่เสียงออกมาเป็นอังกฤษ: โค้ดสั่ง utterance.lang="th-TH" ไปเฉยๆ แต่ไม่เคยเช็คว่าเครื่องมีเสียงไทยจริงไหม
+        // ถ้าเครื่อง/เบราว์เซอร์ไม่มีเสียงไทยติดตั้งไว้ ระบบจะเงียบๆ fallback ไปใช้เสียงเริ่มต้น (มักเป็นอังกฤษ) โดยไม่มี error ใดๆ
+        // วิธีแก้: ดึงรายชื่อเสียงทั้งหมดที่เครื่องมีจริง มาให้ผู้ใช้เลือกเอง จะได้รู้ว่าเครื่องตัวเองมีเสียงไทยให้เลือกหรือเปล่า =====
+        function loadAvailableVoices() {
+            if (!("speechSynthesis" in window)) return;
+            const voices = window.speechSynthesis.getVoices();
+            if (!voices.length) return; // เบราว์เซอร์บางตัวโหลดรายชื่อเสียงช้า จะลองใหม่ตอน event voiceschanged ยิงมา
+
+            const select = document.getElementById("voiceSelect");
+            const hint = document.getElementById("voiceHint");
+            if (!select) return;
+
+            const thaiVoices = voices.filter(v => v.lang.toLowerCase().startsWith("th"));
+            const otherVoices = voices.filter(v => !v.lang.toLowerCase().startsWith("th"));
+            const savedURI = localStorage.getItem("etc_voice_uri") || "";
+
+            select.innerHTML = "";
+            if (thaiVoices.length) {
+                const grp = document.createElement("optgroup");
+                grp.label = "🇹🇭 เสียงภาษาไทย (แนะนำ)";
+                thaiVoices.forEach(v => {
+                    const opt = document.createElement("option");
+                    opt.value = v.voiceURI; opt.textContent = v.name;
+                    grp.appendChild(opt);
+                });
+                select.appendChild(grp);
+                hint.textContent = `พบเสียงไทยในเครื่อง ${thaiVoices.length} เสียงค่ะ`;
+                hint.style.color = "#2ecc71";
+            } else {
+                hint.textContent = "⚠️ ไม่พบเสียงภาษาไทยในเครื่องนี้ เสียงจะออกเป็นภาษาอื่นแทน (ดูวิธีติดตั้งเสียงไทยด้านล่าง)";
+                hint.style.color = "#f39c12";
+            }
+            if (otherVoices.length) {
+                const grp2 = document.createElement("optgroup");
+                grp2.label = "เสียงภาษาอื่น";
+                otherVoices.forEach(v => {
+                    const opt = document.createElement("option");
+                    opt.value = v.voiceURI; opt.textContent = `${v.name} (${v.lang})`;
+                    grp2.appendChild(opt);
+                });
+                select.appendChild(grp2);
+            }
+            if (savedURI && voices.some(v => v.voiceURI === savedURI)) select.value = savedURI;
+        }
+        // เบราว์เซอร์หลายตัว (โดยเฉพาะ Chrome) โหลดรายชื่อเสียงแบบ async ต้องรอ event นี้ก่อนถึงจะได้รายชื่อครบ
+        if ("speechSynthesis" in window) {
+            window.speechSynthesis.onvoiceschanged = loadAvailableVoices;
+        }
+
+        // ===== เพิ่มใหม่: บันทึกเสียงที่เลือกไว้ ===== 
+        function handleVoiceChange() {
+            const uri = document.getElementById("voiceSelect").value;
+            try { localStorage.setItem("etc_voice_uri", uri); } catch(e) {}
+        }
+
+        // ===== เพิ่มใหม่: ปรับ+บันทึกความเร็วเสียงพูด =====
+        function handleVoiceRateChange() {
+            const rate = document.getElementById("voiceRateSlider").value;
+            document.getElementById("voiceRateLabel").textContent = parseFloat(rate).toFixed(1) + "x";
+            try { localStorage.setItem("etc_voice_rate", rate); } catch(e) {}
+        }
+
+        // ===== เพิ่มใหม่: โหลดค่าความเร็วที่เคยบันทึกไว้มาตั้งใน slider ตอนเปิดหน้าเว็บ =====
+        function loadVoiceRateSetting() {
+            try {
+                const saved = localStorage.getItem("etc_voice_rate") || "1";
+                const slider = document.getElementById("voiceRateSlider");
+                if (slider) { slider.value = saved; document.getElementById("voiceRateLabel").textContent = parseFloat(saved).toFixed(1) + "x"; }
+            } catch(e) {}
+        }
+
+        // ===== แก้ไข: อ่านข้อความออกเสียง โดยเลือก "เสียงไทยจริง" ที่ผู้ใช้เลือกไว้ (ถ้ามี) แทนการปล่อยให้เบราว์เซอร์ fallback เอง
+        // เรียกใช้ทั้งตอน ETC ตอบจบ และตอนกดปุ่ม "ทดสอบเสียง" ในหน้าตั้งค่า =====
+        function speakText(text) {
+            if (!("speechSynthesis" in window)) return; // เบราว์เซอร์รุ่นเก่าบางตัวอาจไม่รองรับ
+            const soundToggle = document.getElementById("soundToggle");
+            // ปุ่ม "ทดสอบเสียง" ให้พูดได้เสมอแม้สวิตช์จะปิดอยู่ก็ตาม (เผื่อผู้ใช้อยากลองฟังก่อนตัดสินใจเปิด)
+            const isTestButton = text.includes("ตัวอย่างเสียงของ ETC");
+            if (!isTestButton && soundToggle && !soundToggle.checked) return;
+
+            window.speechSynthesis.cancel(); // ยกเลิกเสียงที่อาจค้างพูดอยู่ก่อนหน้า กันเสียงซ้อนกัน
+            // ตัด markdown สัญลักษณ์ที่ไม่ต้องอ่านออกเสียงออกก่อน (เช่น *, #, `) ให้ฟังลื่นขึ้น
+            const cleanText = text.replace(/[*_#`~>|]/g, "").replace(/\n+/g, " ");
+            const utterance = new SpeechSynthesisUtterance(cleanText);
+
+            // ===== เพิ่มใหม่: ผูกเสียงจริงที่ผู้ใช้เลือกไว้ในหน้าตั้งค่า (ถ้าเลือกไว้) =====
+            try {
+                const savedURI = localStorage.getItem("etc_voice_uri");
+                if (savedURI) {
+                    const match = window.speechSynthesis.getVoices().find(v => v.voiceURI === savedURI);
+                    if (match) { utterance.voice = match; utterance.lang = match.lang; }
+                }
+            } catch(e) {}
+            if (!utterance.voice) utterance.lang = "th-TH"; // ถ้ายังไม่ได้เลือกเสียงเอง ให้ลองขอเสียงไทยตามเดิม
+
+            // ===== เพิ่มใหม่: ใช้ความเร็วที่บันทึกไว้ =====
+            try { utterance.rate = parseFloat(localStorage.getItem("etc_voice_rate")) || 1.0; } catch(e) { utterance.rate = 1.0; }
+
+            window.speechSynthesis.speak(utterance);
+        }
+
+        // ===== เพิ่มใหม่: ปรับขนาดตัวอักษรในกล่องแชท (ใช้งานได้จริงทันที ไม่ต้องรีโหลดหน้า) =====
+        function handleFontSizeChange() {
+            const size = document.getElementById("fontSizeSelect").value;
+            document.documentElement.style.setProperty("--chat-font-size", size + "px");
+            try { localStorage.setItem("etc_font_size", size); } catch(e) {}
+        }
+        function loadFontSizeSetting() {
+            try {
+                const saved = localStorage.getItem("etc_font_size") || "16";
+                document.documentElement.style.setProperty("--chat-font-size", saved + "px");
+                const sel = document.getElementById("fontSizeSelect");
+                if (sel) sel.value = saved;
+            } catch(e) {}
+        }
+
+        // ===== เพิ่มใหม่: ลบประวัติแชททั้งหมดในคลิกเดียว (ลบจริงใน Firestore ทุก session ของผู้ใช้คนนี้) =====
+        async function handleDeleteAllHistory() {
+            if (!currentUserId) { alert("กรุณาเข้าสู่ระบบก่อนค่ะ"); return; }
+            if (!confirm("ต้องการลบประวัติแชททั้งหมดใช่ไหมคะ? การลบนี้ย้อนกลับไม่ได้ค่ะ")) return;
+            try {
+                await loadAllSessions(currentUserId);
+                const deletePromises = allSessions.map(s =>
+                    db.collection("users").doc(currentUserId).collection("sessions").doc(s.id).delete()
+                );
+                await Promise.all(deletePromises);
+                allSessions = [];
+                hideSettingsPage();
+                await startNewChat();
+                alert("ลบประวัติแชททั้งหมดเรียบร้อยแล้วค่ะ");
+            } catch(e) {
+                alert("เกิดข้อผิดพลาดในการลบค่ะ: " + e.message);
+            }
+        }
+
+        function applyProfileToUI() {
+            const dt = userProfile.name ? userProfile.name.substring(0,2).toUpperCase() : "ME";
+            const btn = document.getElementById("profileAvatarBtn");
+            if (userProfile.avatarDataUrl) {
+                btn.style.backgroundImage = `url(${userProfile.avatarDataUrl})`;
+                btn.style.backgroundSize = "cover";
+                btn.style.backgroundPosition = "center";
+                btn.textContent = "";
+            } else {
+                btn.style.backgroundImage = "";
+                btn.textContent = dt;
+                btn.style.background = "#9c27b0";
+                btn.style.color = "white";
+            }
+            const la = document.getElementById("profileAvatarLarge");
+            if (la) la.textContent = userProfile.avatarDataUrl ? "" : dt;
+            if (la && userProfile.avatarDataUrl) la.innerHTML = `<img src="${userProfile.avatarDataUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+            const ni = document.getElementById("profileNameInput");
+            if (ni) ni.value = userProfile.name === "ME" ? "" : userProfile.name;
+        }
+
+        function syncProfileFromFirebase(user) {
+            const name = user.displayName || user.email.split("@")[0];
+            userProfile.name = name;
+            // ===== เพิ่มใหม่: ถ้าบัญชีที่ login มีรูปโปรไฟล์ติดมาด้วย (เช่น สมัครผ่าน Google ในอนาคต) ให้ดึงมาใช้เป็นรูป avatar อัตโนมัติ
+            // หมายเหตุ: ตอนนี้ระบบ login เป็นแบบอีเมล+รหัสผ่านล้วน ซึ่ง Firebase จะไม่มีรูปมาให้อัตโนมัติ (photoURL จะเป็นค่าว่าง)
+            // ผู้ใช้จึงยังต้องอัปโหลดรูปเองในหน้าตั้งค่าอยู่ ถ้าต้องการให้รูปมาอัตโนมัติจริงๆ ต้องเพิ่มปุ่ม "เข้าสู่ระบบด้วย Google" ในหน้า login ก่อน =====
+            if (user.photoURL && !userProfile.avatarDataUrl) {
+                userProfile.avatarDataUrl = user.photoURL;
+            }
+            try { localStorage.setItem("etc_user_profile", JSON.stringify(userProfile)); } catch(e) {}
+            applyProfileToUI();
+            let el = document.getElementById("userEmailMini");
+            if (!el) {
+                el = document.createElement("div");
+                el.id = "userEmailMini";
+                el.style.cssText = "font-size:8px;color:#8a8597;max-width:54px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;margin-top:2px;";
+                document.getElementById("profileAvatarBtn").parentNode.appendChild(el);
+            }
+            el.textContent = user.email.split("@")[0];
+            const wt = document.getElementById("centerTitle");
+            if (wt && isFirstMessage) wt.textContent = `สวัสดีค่ะ คุณ${name} มีอะไรให้ ETC ช่วยดูแลไหมคะ?`;
+        }
+
+        function handleAvatarUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const r = new FileReader();
+            r.onload = (e) => { userProfile.avatarDataUrl = e.target.result; applyProfileToUI(); };
+            r.readAsDataURL(file);
+        }
+
+        function saveProfileSettings() {
+            const v = document.getElementById("profileNameInput").value.trim();
+            userProfile.name = v || "ME";
+            try { localStorage.setItem("etc_user_profile", JSON.stringify(userProfile)); } catch(e) {}
+            const u = auth.currentUser;
+            if (u && v) u.updateProfile({ displayName: v }).catch(()=>{});
+            applyProfileToUI();
+            hideSettingsPage();
+        }
+
+        // ============================================================
+        // Auth Login/Register/Logout
+        // ============================================================
+        function switchToRegister() {
+            authMode = "register";
+            document.getElementById("authTitle").textContent = "สมัครสมาชิก";
+            document.getElementById("authSubtitle").textContent = "สร้างบัญชีเพื่อใช้งาน ETC AI";
+            document.getElementById("authName").style.display = "block";
+            document.getElementById("authSubmitBtn").textContent = "สมัครสมาชิก";
+            document.getElementById("authSwitch").innerHTML = 'มีบัญชีแล้ว? <span onclick="switchToLogin()">เข้าสู่ระบบ</span>';
+            document.getElementById("authError").classList.remove("show");
+        }
+
+        function switchToLogin() {
+            authMode = "login";
+            document.getElementById("authTitle").textContent = "เข้าสู่ระบบ";
+            document.getElementById("authSubtitle").textContent = "เข้าสู่ระบบเพื่อใช้งาน ETC AI";
+            document.getElementById("authName").style.display = "none";
+            document.getElementById("authSubmitBtn").textContent = "เข้าสู่ระบบ";
+            document.getElementById("authSwitch").innerHTML = 'ยังไม่มีบัญชี? <span onclick="switchToRegister()">สมัครสมาชิก</span>';
+            document.getElementById("authError").classList.remove("show");
+        }
+
+        async function handleAuthSubmit() {
+            const email = document.getElementById("authEmail").value.trim();
+            const pass = document.getElementById("authPassword").value;
+            const btn = document.getElementById("authSubmitBtn");
+            const err = document.getElementById("authError");
+            if (!email || !pass) { showAuthError("กรุณากรอกอีเมลและรหัสผ่านค่ะ"); return; }
+            btn.disabled = true;
+            btn.textContent = "กำลังดำเนินการ...";
+            err.classList.remove("show");
+            try {
+                if (authMode === "login") {
+                    await auth.signInWithEmailAndPassword(email, pass);
+                } else {
+                    const name = document.getElementById("authName").value.trim();
+                    const cred = await auth.createUserWithEmailAndPassword(email, pass);
+                    if (name) await cred.user.updateProfile({ displayName: name });
+                }
+            } catch(e) {
+                const m = { "auth/user-not-found":"ไม่พบบัญชีนี้ค่ะ", "auth/wrong-password":"รหัสผ่านไม่ถูกต้องค่ะ", "auth/invalid-credential":"อีเมลหรือรหัสผ่านไม่ถูกต้องค่ะ", "auth/email-already-in-use":"อีเมลนี้มีบัญชีอยู่แล้วค่ะ", "auth/weak-password":"รหัสผ่านต้องมีอย่างน้อย 6 ตัวค่ะ", "auth/invalid-email":"รูปแบบอีเมลไม่ถูกต้องค่ะ" };
+                showAuthError(m[e.code] || "เกิดข้อผิดพลาดค่ะ ลองใหม่อีกครั้ง");
+                btn.disabled = false;
+                btn.textContent = authMode === "login" ? "เข้าสู่ระบบ" : "สมัครสมาชิก";
+            }
+        }
+
+        function showAuthError(msg) {
+            const el = document.getElementById("authError");
+            el.textContent = msg; el.classList.add("show");
+        }
+
+        // ===== เพิ่มใหม่: เข้าสู่ระบบด้วย Google — ข้อดีคือ Firebase จะได้รูปโปรไฟล์ (photoURL) และชื่อจริงมาให้อัตโนมัติจากบัญชี Google
+        // ต่างจาก login แบบอีเมล+รหัสผ่านที่ไม่มีรูปมาให้เลย ต้องอัปโหลดเองเท่านั้น =====
+        function handleGoogleSignIn() {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            const btn = document.getElementById("googleSignInBtn");
+            btn.disabled = true;
+            auth.signInWithPopup(provider)
+                .catch((e) => {
+                    // popup-closed-by-user เกิดตอนผู้ใช้ปิด popup เอง ไม่ต้องโชว์ error ก็ได้
+                    if (e.code !== "auth/popup-closed-by-user") {
+                        showAuthError("เข้าสู่ระบบด้วย Google ไม่สำเร็จค่ะ ลองใหม่อีกครั้ง");
+                    }
+                })
+                .finally(() => { btn.disabled = false; });
+        }
+
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && document.getElementById("authOverlay").classList.contains("show")) handleAuthSubmit();
+        });
+
+        function handleLogout() {
+            if (confirm("ต้องการออกจากระบบใช่ไหมคะ?")) auth.signOut().then(() => hideSettingsPage());
+        }
+
+        // ============================================================
+        // Firestore — Session
+        // ============================================================
+        async function createNewSession(uid) {
+            try {
+                const ref = db.collection("users").doc(uid).collection("sessions").doc();
+                await ref.set({ id: ref.id, title: "แชทใหม่", createdAt: firebase.firestore.FieldValue.serverTimestamp(), updatedAt: firebase.firestore.FieldValue.serverTimestamp(), messages: [] });
+                currentSessionId = ref.id;
+            } catch(e) { console.log("createNewSession:", e); }
+        }
+
+        async function saveMessageToFirestore(userMsg, aiMsg) {
+            if (!currentUserId || !currentSessionId) return;
+            try {
+                const ref = db.collection("users").doc(currentUserId).collection("sessions").doc(currentSessionId);
+                const title = userMsg.length > 40 ? userMsg.substring(0,40) + "..." : userMsg;
+                await ref.update({ title, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), messages: firebase.firestore.FieldValue.arrayUnion({ userMsg, aiMsg, timestamp: new Date().toISOString() }) });
+            } catch(e) { console.log("saveMessage:", e); }
+        }
+
+        async function loadAllSessions(uid) {
+            try {
+                const snap = await db.collection("users").doc(uid).collection("sessions").orderBy("updatedAt","desc").limit(50).get();
+                allSessions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            } catch(e) { allSessions = []; }
+        }
+
+        // ============================================================
+        // History Page
+        // ============================================================
+        async function showHistoryPage() {
+            document.getElementById("historyPage").classList.add("show");
+            setSidebarToggleHidden(true);
+            const list = document.getElementById("historyList");
+            list.innerHTML = '<div class="history-empty">⏳ กำลังโหลด...</div>';
+            if (currentUserId) { await loadAllSessions(currentUserId); renderHistoryList(allSessions, list); }
+        }
+
+        function renderHistoryList(sessions, container) {
+            if (!sessions.length) { container.innerHTML = '<div class="history-empty">📭 ยังไม่มีประวัติแชทค่ะ</div>'; return; }
+            container.innerHTML = sessions.map(s => {
+                const date = s.updatedAt?.toDate ? s.updatedAt.toDate().toLocaleDateString('th-TH') : "";
+                const count = s.messages?.length || 0;
+                return `<div class="chat-session-card" onclick="loadSession('${s.id}')"><div class="session-info"><div class="session-title">${s.title || "แชทไม่มีชื่อ"}</div><div class="session-meta">${date} · ${count} ข้อความ</div></div><button class="session-delete-btn" onclick="event.stopPropagation();deleteSession('${s.id}')">🗑</button></div>`;
+            }).join("");
+        }
+
+        function hideHistoryPage() { document.getElementById("historyPage").classList.remove("show"); setSidebarToggleHidden(false); }
+
+        async function loadSession(sessionId) {
+            hideHistoryPage();
+            if (!currentUserId) return;
+            try {
+                const doc = await db.collection("users").doc(currentUserId).collection("sessions").doc(sessionId).get();
+                if (!doc.exists) return;
+                const session = doc.data();
+                currentSessionId = sessionId;
+                const cw = document.getElementById("chatWindow");
+                cw.innerHTML = "";
+                chatHistory = [chatHistory[0]];
+                isFirstMessage = false;
+                document.getElementById("welcomeContainer").classList.add("fade-out-up");
+                document.getElementById("inputWrapper").classList.add("is-chatting-input");
+                document.getElementById("heroSection").classList.add("chat-active");
+                (session.messages || []).forEach(m => {
+                    const av = userProfile.avatarDataUrl ? `<div class="avatar-user" style="background-image:url(${userProfile.avatarDataUrl});background-size:cover;"></div>` : `<div class="avatar-user">${userProfile.name.substring(0,2).toUpperCase()}</div>`;
+                    cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-user"><div class="chat-bubble">${m.userMsg}</div>${av}</div>`);
+                    cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-bot"><img src="img/ETC.png" class="avatar-img" onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('avatar-fallback');this.innerText='ETC';"><div class="chat-bubble">${marked.parse(m.aiMsg)}</div></div>`);
+                    chatHistory.push({ role:"user", content:m.userMsg });
+                    chatHistory.push({ role:"assistant", content:m.aiMsg });
+                });
+                cw.scrollTop = cw.scrollHeight;
+                // ===== เพิ่มใหม่: รีเซ็ตสถานะเตือนก่อน แล้วเช็คใหม่ทันที เผื่อแชทเก่าที่โหลดมายาวเกินเกณฑ์อยู่แล้ว จะได้เตือนทันทีไม่ต้องรอข้อความถัดไป =====
+                hasWarnedThisChat = false;
+                checkChatLengthAndWarn();
+            } catch(e) { console.log("loadSession:", e); }
+        }
+
+        async function deleteSession(sessionId) {
+            if (!confirm("ลบประวัติแชทนี้ใช่ไหมคะ?")) return;
+            await db.collection("users").doc(currentUserId).collection("sessions").doc(sessionId).delete();
+            allSessions = allSessions.filter(s => s.id !== sessionId);
+            if (sessionId === currentSessionId) startNewChat();
+            renderHistoryList(allSessions, document.getElementById("historyList"));
+        }
+
+        async function startNewChat() {
+            hideHistoryPage();
+            document.getElementById("chatWindow").innerHTML = "";
+            chatHistory = [chatHistory[0]];
+            isFirstMessage = true;
+            hasWarnedThisChat = false; // ===== เพิ่มใหม่: รีเซ็ตสถานะเตือน กันไม่ให้แบนเนอร์ไม่ขึ้นอีกเลยในแชทใหม่ที่ยังไม่ยาว =====
+            document.getElementById("welcomeContainer").classList.remove("fade-out-up");
+            document.getElementById("inputWrapper").classList.remove("is-chatting-input");
+            document.getElementById("heroSection").classList.remove("chat-active");
+            if (currentUserId) await createNewSession(currentUserId);
+        }
+
+        // ============================================================
+        // Search Page
+        // ============================================================
+        function showSearchPage() {
+            document.getElementById("searchPage").classList.add("show");
+            setSidebarToggleHidden(true);
+            document.getElementById("searchInput").value = "";
+            document.getElementById("searchBody").innerHTML = '<div class="history-empty">🔬 พิมพ์คำค้นหาด้านบนค่ะ</div>';
+            setTimeout(() => document.getElementById("searchInput").focus(), 300);
+        }
+        function hideSearchPage() { document.getElementById("searchPage").classList.remove("show"); setSidebarToggleHidden(false); }
+
+        function handleSearch(query) {
+            const body = document.getElementById("searchBody");
+            if (!query.trim()) { body.innerHTML = '<div class="history-empty">🔬 พิมพ์คำค้นหาด้านบนค่ะ</div>'; return; }
+            const q = query.toLowerCase();
+            const results = [];
+            allSessions.forEach(s => { (s.messages||[]).forEach(m => { if (m.userMsg.toLowerCase().includes(q) || m.aiMsg.toLowerCase().includes(q)) results.push({ session:s, msg:m }); }); });
+            if (!results.length) { body.innerHTML = '<div class="history-empty">ไม่พบผลลัพธ์ค่ะ</div>'; return; }
+            const hl = (t,q) => t.replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi'), m=>`<span class="search-highlight">${m}</span>`);
+            body.innerHTML = `<div class="search-result-msg">พบ ${results.length} ผลลัพธ์</div>` + results.map(r=>`<div class="chat-session-card" onclick="loadSession('${r.session.id}');hideSearchPage();"><div class="session-info"><div class="session-title">${hl(r.msg.userMsg.substring(0,60),query)}</div><div class="session-meta">${r.session.title} · คลิกเพื่อดูแชทนี้</div></div></div>`).join("");
+        }
+
+        // ============================================================
+        // Overlay helpers
+        // ============================================================
+        // ===== เพิ่มใหม่: ซ่อน/แสดงปุ่ม toggle sidebar (☰) — เรียกใช้ทุกครั้งที่เปิด/ปิดหน้า overlay ใดๆ
+        // กันปุ่มนี้ไปทับกับปุ่มของหน้านั้นๆ (เช่น ปุ่ม "กลับไปหน้าแชท" ในหน้าอัปเกรด, ปุ่ม ✕ ปิดหน้าต่างๆ) ===== */
+        function setSidebarToggleHidden(hidden) {
+            document.getElementById("sidebarToggleBtn").classList.toggle("overlay-open", hidden);
+        }
+        function showUpgradePage() { document.getElementById("upgradePage").classList.add("show"); setSidebarToggleHidden(true); }
+        function hideUpgradePage() { document.getElementById("upgradePage").classList.remove("show"); setSidebarToggleHidden(false); }
+        function showLogoPopup() { document.getElementById("logoPopup").classList.add("show"); }
+        function hideLogoPopup() { document.getElementById("logoPopup").classList.remove("show"); }
+        function showSettingsPage() {
+            document.getElementById("settingsPage").classList.add("show");
+            setSidebarToggleHidden(true);
+            // ===== เพิ่มใหม่: แสดงอีเมลของบัญชีที่ login อยู่ในแท็บ "บัญชี" =====
+            const emailEl = document.getElementById("accountEmailDisplay");
+            if (emailEl && auth.currentUser) emailEl.textContent = auth.currentUser.email;
+        }
+        function hideSettingsPage() { document.getElementById("settingsPage").classList.remove("show"); setSidebarToggleHidden(false); }
+
+        // ===== เพิ่มใหม่: สลับแท็บในหน้าตั้งค่า (ทั่วไป/เสียง/บัญชี) เหมือนหน้าตั้งค่า ChatGPT =====
+        function showSettingsTab(tabName) {
+            document.querySelectorAll(".settings-tab").forEach(el => el.style.display = "none");
+            document.querySelectorAll(".settings-nav-item").forEach(el => el.classList.remove("active"));
+            document.getElementById("tab-" + tabName).style.display = "block";
+            document.getElementById("navBtn-" + tabName).classList.add("active");
+        }
+
+        // ===== เพิ่มใหม่: ส่งอีเมลรีเซ็ตรหัสผ่านจริงผ่าน Firebase =====
+        function handlePasswordReset() {
+            if (!auth.currentUser || !auth.currentUser.email) { alert("ไม่พบอีเมลของบัญชีนี้ค่ะ"); return; }
+            auth.sendPasswordResetEmail(auth.currentUser.email)
+                .then(() => alert("ส่งลิงก์รีเซ็ตรหัสผ่านไปที่ " + auth.currentUser.email + " แล้วค่ะ กรุณาเช็คอีเมล"))
+                .catch((e) => alert("เกิดข้อผิดพลาดค่ะ: " + e.message));
+        }
+
+        // ===== เพิ่มใหม่: ปรับ+บันทึกระดับความคิดสร้างสรรค์ (ผูกกับ temperature จริงที่ส่งไป Groq) =====
+        function handleCreativityChange() {
+            const val = parseFloat(document.getElementById("creativitySlider").value);
+            const label = document.getElementById("creativityLabel");
+            label.textContent = val <= 0.4 ? "แม่นยำ" : val >= 0.8 ? "สร้างสรรค์" : "สมดุล";
+            try { localStorage.setItem("etc_creativity", val); } catch(e) {}
+        }
+        function loadCreativitySetting() {
+            try {
+                const saved = parseFloat(localStorage.getItem("etc_creativity")) || 0.7;
+                const slider = document.getElementById("creativitySlider");
+                if (slider) { slider.value = saved; handleCreativityChange(); }
+            } catch(e) {}
+        }
+
+        // ============================================================
+        // สีธีม (Accent color) — เปลี่ยนสีปุ่ม/อวตาร์/บับเบิลข้อความทั้งแอปทันที
+        // ============================================================
+        // ===== เพิ่มใหม่: ชุดสีให้เลือก [ชื่อ, สีที่1, สีที่2] =====
+        const ACCENT_PRESETS = [
+            { name: "ม่วง (ค่าเริ่มต้น)", c1: "#a8c7fa", c2: "#9c27b0" },
+            { name: "ฟ้า", c1: "#7dd3fc", c2: "#2563eb" },
+            { name: "ชมพู", c1: "#fda4af", c2: "#db2777" },
+            { name: "เขียว", c1: "#86efac", c2: "#059669" },
+            { name: "ส้ม", c1: "#fdba74", c2: "#ea580c" },
+        ];
+        function renderAccentSwatches() {
+            const row = document.getElementById("accentSwatchRow");
+            if (!row) return;
+            const current = localStorage.getItem("etc_accent1") || ACCENT_PRESETS[0].c1;
+            row.innerHTML = ACCENT_PRESETS.map((p, i) =>
+                `<div class="accent-swatch ${p.c1 === current ? 'active' : ''}" style="background:linear-gradient(135deg,${p.c1},${p.c2});" onclick="setAccentColor(${i})" title="${p.name}"></div>`
+            ).join("");
+        }
+        function setAccentColor(index) {
+            const p = ACCENT_PRESETS[index];
+            document.documentElement.style.setProperty("--accent1", p.c1);
+            document.documentElement.style.setProperty("--accent2", p.c2);
+            try { localStorage.setItem("etc_accent1", p.c1); localStorage.setItem("etc_accent2", p.c2); } catch(e) {}
+            renderAccentSwatches();
+        }
+        function loadAccentColor() {
+            try {
+                const c1 = localStorage.getItem("etc_accent1");
+                const c2 = localStorage.getItem("etc_accent2");
+                if (c1 && c2) {
+                    document.documentElement.style.setProperty("--accent1", c1);
+                    document.documentElement.style.setProperty("--accent2", c2);
+                }
+            } catch(e) {}
+            renderAccentSwatches();
+        }
+
+        // ============================================================
+        // ระบบคิดละเอียด (Advanced reasoning) — ผูกกับ reasoning_effort จริงของ Groq
+        // ============================================================
+        function handleDeepThinkChange() {
+            const enabled = document.getElementById("deepThinkToggle").checked;
+            try { localStorage.setItem("etc_deep_think", enabled); } catch(e) {}
+        }
+        function loadDeepThinkSetting() {
+            try {
+                const saved = localStorage.getItem("etc_deep_think") === "true";
+                const toggle = document.getElementById("deepThinkToggle");
+                if (toggle) toggle.checked = saved;
+            } catch(e) {}
+        }
+
+        // ============================================================
+        // พิมพ์ด้วยเสียง (Dictation) — ใช้ Web Speech Recognition API ของเบราว์เซอร์เอง ฟรี 100%
+        // ============================================================
+        let dictationRecognition = null;
+        let isDictating = false;
+
+        function handleDictationToggleChange() {
+            const enabled = document.getElementById("dictationToggle").checked;
+            try { localStorage.setItem("etc_dictation_enabled", enabled); } catch(e) {}
+            document.getElementById("micBtn").style.display = enabled ? "flex" : "none";
+        }
+        function loadDictationSetting() {
+            try {
+                const saved = localStorage.getItem("etc_dictation_enabled") === "true";
+                const toggle = document.getElementById("dictationToggle");
+                if (toggle) toggle.checked = saved;
+                document.getElementById("micBtn").style.display = saved ? "flex" : "none";
+            } catch(e) {}
+        }
+        // ===== เพิ่มใหม่: เริ่ม/หยุดฟังเสียงพูดแล้วแปลงเป็นข้อความใส่ในช่องพิมพ์ให้อัตโนมัติ =====
+        function toggleDictation() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) { alert("ขออภัยค่ะ เบราว์เซอร์นี้ไม่รองรับการพิมพ์ด้วยเสียง ลองเปิดผ่าน Chrome ดูนะคะ"); return; }
+            const micBtn = document.getElementById("micBtn");
+
+            if (isDictating) {
+                dictationRecognition.stop();
+                return;
+            }
+            dictationRecognition = new SpeechRecognition();
+            dictationRecognition.lang = "th-TH";
+            dictationRecognition.interimResults = false;
+            dictationRecognition.maxAlternatives = 1;
+
+            dictationRecognition.onstart = () => { isDictating = true; micBtn.textContent = "⏺️"; micBtn.style.color = "#ff6b9d"; };
+            dictationRecognition.onend = () => { isDictating = false; micBtn.textContent = "🎙️"; micBtn.style.color = "var(--accent1, #a8c7fa)"; };
+            dictationRecognition.onerror = (e) => {
+                if (e.error !== "no-speech" && e.error !== "aborted") alert("ฟังเสียงไม่สำเร็จค่ะ ลองใหม่อีกครั้ง (" + e.error + ")");
+            };
+            dictationRecognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                document.getElementById("userInputText").value = transcript;
+            };
+            dictationRecognition.start();
+        }
+
+        // ===== เพิ่มใหม่: เปิด/ปิด sidebar ซ้ายบนมือถือ (กดปุ่ม ☰) =====
+        function toggleSidebar() {
+            const sidebar = document.getElementById("iconSidebar");
+            const btn = document.getElementById("sidebarToggleBtn");
+            const isOpen = sidebar.classList.toggle("open");
+            btn.textContent = isOpen ? "✕" : "☰"; // ===== เพิ่มใหม่: เปลี่ยนไอคอนปุ่มเป็นกากบาทตอนเปิด ให้รู้ว่ากดซ้ำแล้วจะปิด =====
+        }
+        function closeSidebar() {
+            document.getElementById("iconSidebar").classList.remove("open");
+            document.getElementById("sidebarToggleBtn").textContent = "☰";
+        }
+        // ===== เพิ่มใหม่: พอกดเลือกเมนูใดๆใน sidebar แล้ว ให้ปิด sidebar ทันที (เฉพาะจอที่ใช้การกด ไม่ใช่ hover) กันไม่ให้บังหน้าจอค้างไว้ =====
+        document.getElementById("iconSidebar").addEventListener("click", (e) => {
+            if (e.target.closest(".menu-icon, .logo-container")) closeSidebar();
+        });
+
+        // ============================================================
+        // Chat
+        // ============================================================
+        function getTemperatureForText(text) {
+            // ===== เพิ่มใหม่: ใช้ค่า "ความคิดสร้างสรรค์" ที่ผู้ใช้ตั้งไว้เองในหน้าตั้งค่าเป็นค่าเริ่มต้น (แทนค่าคงที่ 0.7 เดิม) =====
+            let base = 0.7;
+            try { base = parseFloat(localStorage.getItem("etc_creativity")) || 0.7; } catch(e) {}
+            const kw = ["แต่งกลอน","แต่งเพลง","เขียนเรียงความ","แต่งนิยาย","แต่งเรื่อง","เขียนบทกวี","แต่งคำกลอน","เขียนนิทาน","แต่งเนื้อเพลง"];
+            for (const k of kw) { if (text.toLowerCase().includes(k)) return Math.min(base + 0.15, 0.95); }
+            return base;
+        }
+
+        // ============================================================
+        // แนบรูปภาพให้ AI ดู (Vision) — ใช้โมเดล qwen3.6-27b ที่รองรับภาพอยู่แล้ว ไม่ต้องเปลี่ยนโมเดล
+        // ============================================================
+        let attachedImageBase64 = null; // เก็บรูปที่เลือกไว้รอส่ง (เป็น data URL base64)
+
+        function handleImageAttach(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            if (file.size > 15 * 1024 * 1024) { alert("ไฟล์รูปใหญ่เกินไปค่ะ (จำกัด 15MB)"); return; }
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                attachedImageBase64 = e.target.result;
+                document.getElementById("imagePreviewThumb").src = attachedImageBase64;
+                document.getElementById("imagePreviewBox").style.display = "block";
+            };
+            reader.readAsDataURL(file);
+        }
+        function clearImageAttachment() {
+            attachedImageBase64 = null;
+            document.getElementById("imagePreviewBox").style.display = "none";
+            document.getElementById("imageFileInput").value = "";
+        }
+
+        // ============================================================
+        // ถ่ายรูปสด (Live camera) — เปิดกล้องเครื่องในเว็บโดยตรง ถ่าย+ดูตัวอย่างก่อนส่งให้ ETC
+        // ใช้ getUserMedia ซึ่งเบราว์เซอร์อนุญาตเฉพาะบน HTTPS เท่านั้น (Vercel เป็น HTTPS อยู่แล้วจึงใช้ได้ปกติ)
+        // ============================================================
+        let cameraStream = null;      // เก็บ stream กล้องที่เปิดอยู่ ไว้ปิดทีหลัง
+        let capturedPhotoDataUrl = null; // เก็บรูปที่ถ่ายไว้ รอผู้ใช้กด "ใช้รูปนี้"
+
+        async function openCameraModal() {
+            const modal = document.getElementById("cameraModal");
+            const video = document.getElementById("cameraVideo");
+            const statusText = document.getElementById("cameraStatusText");
+            // รีเซ็ต UI กลับไปโหมด "กำลังถ่าย" ทุกครั้งที่เปิดใหม่
+            video.style.display = "block";
+            document.getElementById("cameraShotImg").style.display = "none";
+            document.getElementById("cameraCaptureBtn").style.display = "inline-block";
+            document.getElementById("cameraRetakeBtn").style.display = "none";
+            document.getElementById("cameraUseBtn").style.display = "none";
+            statusText.textContent = "กำลังเปิดกล้องค่ะ...";
+            modal.classList.add("show");
+
+            // ===== เช็คก่อนว่าเบราว์เซอร์รองรับ getUserMedia ไหม (ต้องเป็น HTTPS หรือ localhost เท่านั้น) =====
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                statusText.textContent = "เบราว์เซอร์นี้ไม่รองรับการเปิดกล้องค่ะ (ต้องเข้าเว็บผ่าน HTTPS)";
+                return;
+            }
+            try {
+                // facingMode:"environment" = ขอกล้องหลังก่อนเป็นอันดับแรก (เหมาะกับมือถือ) ถ้าไม่มีเบราว์เซอร์จะใช้กล้องที่มีให้เอง
+                cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+                video.srcObject = cameraStream;
+                statusText.textContent = "";
+            } catch (err) {
+                // ===== เพิ่มใหม่: แจ้งเหตุผลที่พบบ่อยให้ผู้ใช้เข้าใจง่ายๆ แทน error code ดิบๆ =====
+                if (err.name === "NotAllowedError") {
+                    statusText.textContent = "ไม่ได้รับอนุญาตให้ใช้กล้องค่ะ กรุณาอนุญาตสิทธิ์กล้องในเบราว์เซอร์แล้วลองใหม่";
+                } else if (err.name === "NotFoundError") {
+                    statusText.textContent = "ไม่พบกล้องบนอุปกรณ์นี้ค่ะ";
+                } else {
+                    statusText.textContent = "เปิดกล้องไม่สำเร็จค่ะ: " + err.message;
+                }
+            }
+        }
+
+        function closeCameraModal() {
+            document.getElementById("cameraModal").classList.remove("show");
+            // ===== สำคัญ: ต้องปิด track ของกล้องทุกครั้งที่ปิดหน้าต่าง ไม่งั้นไฟกล้องจะติดค้าง (ไฟแจ้งเตือนกล้องทำงานค้างอยู่) =====
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+            }
+            capturedPhotoDataUrl = null;
+        }
+
+        function capturePhoto() {
+            const video = document.getElementById("cameraVideo");
+            const canvas = document.getElementById("cameraCanvas");
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+            // บีบอัดเป็น JPEG คุณภาพ 0.9 กันไฟล์ใหญ่เกินไปตอนส่งขึ้น Groq (จำกัดไว้ที่ 15MB ในหน้าเว็บ)
+            capturedPhotoDataUrl = canvas.toDataURL("image/jpeg", 0.9);
+
+            document.getElementById("cameraShotImg").src = capturedPhotoDataUrl;
+            document.getElementById("cameraShotImg").style.display = "block";
+            video.style.display = "none";
+            document.getElementById("cameraCaptureBtn").style.display = "none";
+            document.getElementById("cameraRetakeBtn").style.display = "inline-block";
+            document.getElementById("cameraUseBtn").style.display = "inline-block";
+            // หมายเหตุ: ไม่ปิด stream ตรงนี้ เก็บกล้องเปิดค้างไว้เผื่อกด "ถ่ายใหม่" จะได้ไม่ต้องขอสิทธิ์กล้องซ้ำ
+        }
+
+        function retakePhoto() {
+            capturedPhotoDataUrl = null;
+            document.getElementById("cameraShotImg").style.display = "none";
+            document.getElementById("cameraVideo").style.display = "block";
+            document.getElementById("cameraCaptureBtn").style.display = "inline-block";
+            document.getElementById("cameraRetakeBtn").style.display = "none";
+            document.getElementById("cameraUseBtn").style.display = "none";
+        }
+
+        function useCapturedPhoto() {
+            if (!capturedPhotoDataUrl) return;
+            // ใช้ตัวแปรและกล่องพรีวิวเดียวกับปุ่มแนบไฟล์ 📷 เดิม เพื่อให้ตอนกดส่งทำงานเหมือนกันทุกทาง
+            attachedImageBase64 = capturedPhotoDataUrl;
+            document.getElementById("imagePreviewThumb").src = attachedImageBase64;
+            document.getElementById("imagePreviewBox").style.display = "block";
+            closeCameraModal();
+        }
+
+        // ============================================================
+        // สร้างภาพ (Image generation) — เปิดใช้งานผ่าน Google Gemini API (ฟรี ไม่ผูกบัตร)
+        // ============================================================
+        // ===== แก้ไข (สำคัญ): เดิมใช้ Pollinations.ai แต่พบว่าสร้างภาพไม่เหมาะสมออกมาซ้ำๆ แม้เพิ่มตัวกรองแล้วก็ตาม
+        // จึงปิดไปก่อน ตอนนี้เปลี่ยนมาใช้ Gemini API (โมเดล gemini-2.5-flash-image) แทน เพราะมีตัวกรองเนื้อหาในตัว
+        // ที่เข้มงวดกว่ามาก และมี free tier ที่ไม่ต้องผูกบัตรเครดิต (ผ่าน Google AI Studio) เหมาะกับเว็บสาธารณะแบบนี้ =====
+        function detectImageGenRequest(text) {
+            const kw = ["วาดรูป", "วาดภาพ", "สร้างภาพ", "สร้างรูป", "เจนรูป", "เจนภาพ", "แต่งรูป", "generate image", "draw a picture", "draw an image"];
+            return kw.some(k => text.toLowerCase().includes(k));
+        }
+
+        // เรียก backend /api/generate-image เพื่อสร้างภาพ แล้วแสดงผลในบับเบิลแชทของ ETC
+        async function generateImageWithGemini(prompt) {
+            const cw = document.getElementById("chatWindow");
+            const botId = 'imggen-' + Date.now();
+            // แสดงบับเบิลของ ETC พร้อมข้อความ "กำลังวาดภาพ..." ระหว่างรอ
+            cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-bot"><img src="img/ETC.png" class="avatar-img" onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('avatar-fallback');this.innerText='ETC';"><div class="chat-bubble" id="${botId}">ETC กำลังวาดภาพให้อยู่ค่ะ รอสักครู่นะคะ 🎨</div></div>`);
+            cw.scrollTop = cw.scrollHeight;
+
+            try {
+                const res = await fetch("/api/generate-image", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ prompt })
+                });
+                const data = await res.json();
+                const bubble = document.getElementById(botId);
+
+                if (!res.ok || !data.image) {
+                    // ===== เพิ่มใหม่: ถ้าโดนตัวกรองความปลอดภัยของ Gemini บล็อก ให้แจ้งเหตุผลสุภาพแทน error ดิบๆ =====
+                    bubble.innerText = data.blocked
+                        ? "ขออภัยค่ะ คำขอนี้ ETC ไม่สามารถสร้างภาพให้ได้ เนื่องจากเนื้อหาอาจไม่เหมาะสมค่ะ ลองเปลี่ยนคำอธิบายภาพแล้วลองใหม่ได้นะคะ"
+                        : "ขออภัยค่ะ สร้างภาพไม่สำเร็จ ลองใหม่อีกครั้งนะคะ";
+                    return;
+                }
+                // แสดงภาพที่สร้างได้ในบับเบิล (data.image เป็น data URL base64 อยู่แล้วจาก backend)
+                bubble.innerHTML = `<img src="${data.image}" style="max-width:100%; border-radius:12px; display:block;">`;
+                cw.scrollTop = cw.scrollHeight;
+            } catch (err) {
+                document.getElementById(botId).innerText = "เชื่อมต่อระบบสร้างภาพไม่สำเร็จค่ะ: " + err.message;
+            }
+        }
+
+        function handleSendAction() {
+            const input = document.getElementById("userInputText");
+            const btn = document.getElementById("actionBtn");
+            if (isAiThinking) {
+                if (currentController) currentController.abort();
+                isAiThinking = false; btn.innerText = "➔"; btn.style.color = "#a8c7fa"; return;
+            }
+            // ===== แก้ไข: อนุญาตให้ส่งได้ถ้ามีรูปแนบอยู่ แม้ไม่ได้พิมพ์ข้อความก็ตาม =====
+            if (!input.value.trim() && !attachedImageBase64) return;
+            if (isFirstMessage) {
+                document.getElementById("welcomeContainer").classList.add("fade-out-up");
+                document.getElementById("inputWrapper").classList.add("is-chatting-input");
+                document.getElementById("heroSection").classList.add("chat-active");
+                isFirstMessage = false;
+            }
+            const text = input.value.trim() || "อธิบายรูปนี้ให้ฟังหน่อยค่ะ";
+            input.value = "";
+            // ===== เพิ่มใหม่: ปิดแป้นพิมพ์มือถืออัตโนมัติทันทีที่กดส่ง (blur = เอาโฟกัสออกจากช่องพิมพ์)
+            // เบราว์เซอร์มือถือจะซ่อนแป้นพิมพ์ให้เองเมื่อช่อง input ไม่ได้ถูกโฟกัสอยู่ ไม่ต้องกดปิดเองอีกต่อไป
+            // บนคอมไม่มีผลกระทบอะไร เพราะไม่มีแป้นพิมพ์บนจอให้ซ่อนอยู่แล้ว =====
+            input.blur();
+
+            // ===== แก้ไข: ถ้าเป็นคำสั่งขอให้วาดรูป ให้เรียก Gemini API สร้างภาพจริงแทน (เปิดใช้งานแล้ว) =====
+            if (!attachedImageBase64 && detectImageGenRequest(text)) {
+                const cw = document.getElementById("chatWindow");
+                cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-user"><div class="chat-bubble">${text}</div></div>`);
+                cw.scrollTop = cw.scrollHeight;
+                generateImageWithGemini(text);
+                return;
+            }
+
+            executeMessageSend(text, attachedImageBase64);
+            clearImageAttachment();
+        }
+
+        async function executeMessageSend(text, imageBase64) {
+            const cw = document.getElementById("chatWindow");
+            const btn = document.getElementById("actionBtn");
+            isAiThinking = true; btn.innerText = "■"; btn.style.color = "#ff6b9d";
+            currentController = new AbortController();
+            const av = userProfile.avatarDataUrl ? `<div class="avatar-user" style="background-image:url(${userProfile.avatarDataUrl});background-size:cover;background-position:center;"></div>` : `<div class="avatar-user">${userProfile.name ? userProfile.name.substring(0,2).toUpperCase() : "ME"}</div>`;
+            // ===== เพิ่มใหม่: ถ้ามีรูปแนบมา ให้โชว์รูปเล็กๆในบับเบิลข้อความของผู้ใช้ด้วย =====
+            const imgHtml = imageBase64 ? `<img src="${imageBase64}" style="max-width:200px; border-radius:10px; display:block; margin-bottom:6px;">` : "";
+            cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-user"><div class="chat-bubble">${imgHtml}${text}</div>${av}</div>`);
+            const botId = 'bot-' + Date.now();
+            cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-bot"><img src="img/ETC.png" class="avatar-img" onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('avatar-fallback');this.innerText='ETC';"><div class="chat-bubble" id="${botId}">ETC กำลังคิด...</div></div>`);
+            cw.scrollTop = cw.scrollHeight;
+
+            // ===== เพิ่มใหม่: ถ้ามีรูปแนบมา ให้สร้าง message แบบ multimodal (ข้อความ+รูป) ตามฟอร์แมตที่ Groq ต้องการ
+            // ไม่ใช้ chatHistory ที่เป็น string ล้วนแบบเดิม เพราะโมเดล vision ต้องการ content เป็น array ของ [text, image_url] =====
+            const userMessageForAPI = imageBase64
+                ? { role: "user", content: [ { type: "text", text: text }, { type: "image_url", image_url: { url: imageBase64 } } ] }
+                : { role: "user", content: text };
+
+            // เก็บ chatHistory ไว้เป็นข้อความล้วน (ไม่เก็บรูปถาวร กันประวัติแชทบวมเกินไปและกัน error ตอนคุยยาวๆ)
+            chatHistory.push({ role: "user", content: imageBase64 ? `[ผู้ใช้ส่งรูปมาพร้อมข้อความ] ${text}` : text });
+
+            try {
+                const messagesToSend = imageBase64
+                    ? [...buildRequestMessages().slice(0, -1), userMessageForAPI] // แทนที่ข้อความล่าสุดด้วยเวอร์ชันที่มีรูปติดไปด้วย
+                    : buildRequestMessages();
+
+                const res = await fetch("/api/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    signal: currentController.signal,
+                    body: JSON.stringify({
+                        messages: messagesToSend,
+                        temperature: getTemperatureForText(text),
+                        deepThinking: localStorage.getItem("etc_deep_think") === "true"
+                    })
+                });
+
+                // ===== เพิ่มใหม่: เช็ค error ก่อนอ่าน stream เผื่อ Groq ตอบ error (เช่น key ผิด, โมเดลถูกยุบ) =====
+                if (!res.ok) {
+                    const errData = await res.text();
+                    throw new Error(`เชื่อมต่อ AI ไม่สำเร็จ (${res.status}): ${errData}`);
+                }
+
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+                let fullResponse = "", buffer = "";
+                // ===== เพิ่มใหม่ (แก้บั๊กจอกระตุก): เดิมโค้ดสั่ง render คำตอบใหม่ทั้งหมด + เลื่อนจอ "ทุกครั้ง" ที่มีตัวอักษรใหม่มาจาก stream
+                // (อาจถี่เป็นร้อยครั้งต่อวินาทีตอน Groq ส่งข้อมูลมาเร็วๆ) ทำให้เบราว์เซอร์คำนวณเลย์เอาต์ใหม่รัวๆจนจอดูกระตุกเด้ง
+                // แก้โดยใช้ requestAnimationFrame รวบการอัปเดตให้เกิดแค่ครั้งเดียวต่อเฟรมจอ (สูงสุด ~60 ครั้ง/วินาที) ซึ่งลื่นพอสำหรับตาคนดูอยู่แล้ว
+                // และเบากว่าการอัปเดตทุกตัวอักษรมาก โดยยังคงความรู้สึกว่าข้อความ "ไหล" ออกมาต่อเนื่องเหมือนเดิม =====
+                let renderScheduled = false;
+                function scheduleRender() {
+                    if (renderScheduled) return;
+                    renderScheduled = true;
+                    requestAnimationFrame(() => {
+                        document.getElementById(botId).innerHTML = marked.parse(fullResponse);
+                        cw.scrollTop = cw.scrollHeight;
+                        renderScheduled = false;
+                    });
+                }
+                while(true) {
+                    const {done,value} = await reader.read();
+                    if(done) break;
+                    buffer += decoder.decode(value,{stream:true});
+                    const lines = buffer.split("\n"); buffer = lines.pop();
+                    for (const line of lines) {
+                        if (line.trim().startsWith("data: ")) {
+                            const payload = line.trim().slice(6);
+                            if (payload === "[DONE]") continue; // ===== เพิ่มใหม่: ข้ามสัญญาณจบ stream ของ Groq =====
+                            try {
+                                const json = JSON.parse(payload);
+                                if (json.choices[0].delta.content) {
+                                    if(fullResponse === "") document.getElementById(botId).innerHTML = "";
+                                    fullResponse += json.choices[0].delta.content;
+                                    scheduleRender(); // ===== แก้ไข: เดิมเรียก render+scroll ตรงนี้ทุกครั้ง เปลี่ยนเป็นแค่ "ขอคิว" ไว้ก่อน =====
+                                }
+                            } catch(e) {}
+                        }
+                    }
+                }
+                // ===== เพิ่มใหม่: บังคับ render ครั้งสุดท้ายให้ครบถ้วนหลัง stream จบ กันกรณีตัวอักษรสุดท้ายยังไม่ทันถูกวาดในเฟรมสุดท้าย =====
+                document.getElementById(botId).innerHTML = marked.parse(fullResponse);
+                cw.scrollTop = cw.scrollHeight;
+                chatHistory.push({ role:"assistant", content:fullResponse });
+                await saveMessageToFirestore(text, fullResponse);
+                speakText(fullResponse); // ===== เพิ่มใหม่: อ่านคำตอบออกเสียง (จะอ่านจริงก็ต่อเมื่อเปิดสวิตช์ "เสียงตอบกลับ" ไว้ในหน้าตั้งค่า) =====
+                checkChatLengthAndWarn(); // ===== เพิ่มใหม่: เช็คว่าแชทยาวเกินไปหรือยัง ถ้าใช่แสดงแบนเนอร์แนะนำให้เริ่มแชทใหม่ =====
+            } catch(e) {
+                // ===== แก้ไข: โชว์ error message จริงๆ ในกล่องแชท ช่วยตอน debug (เดิมจะขึ้นแค่ "คำตอบถูกยกเลิกค่ะ" ทุกกรณี) =====
+                document.getElementById(botId).textContent = e.name === "AbortError" ? "คำตอบถูกยกเลิกค่ะ" : `ขออภัยค่ะ เกิดข้อผิดพลาด: ${e.message}`;
+            } finally {
+                isAiThinking = false; btn.innerText = "➔"; btn.style.color = "#a8c7fa";
+            }
+        }
+
+        // ============================================================
+        // Init
+        // ============================================================
+        loadUserProfile();
+        applyProfileToUI();
+        loadSoundSetting();
+        loadVoiceRateSetting();
+        loadFontSizeSetting();
+        loadCreativitySetting();
+        loadAccentColor();
+        loadDeepThinkSetting();
+        loadDictationSetting();
+        loadAvailableVoices(); // เผื่อบางเบราว์เซอร์โหลดรายชื่อเสียงพร้อมใช้ทันทีโดยไม่ต้องรอ event voiceschanged
+    </script>
+</body>
+</html>
