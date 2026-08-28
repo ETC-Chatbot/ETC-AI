@@ -129,6 +129,13 @@
             .gemini-input-box input { padding: 12px 2px; }
         }
 
+        /* ===== เพิ่มใหม่: เมนูเล็กๆ ที่เด้งขึ้นมาตอนกดปุ่ม ➕ ให้เลือกระหว่าง "ถ่ายรูป" กับ "เลือกจากเครื่อง" ===== */
+        .attach-menu-wrapper { position: relative; display: inline-block; }
+        .attach-menu { display: none; position: absolute; bottom: calc(100% + 10px); left: 0; background: rgba(38, 26, 64, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(168, 199, 250, 0.25); border-radius: 16px; padding: 6px; min-width: 170px; box-shadow: 0 8px 24px rgba(0,0,0,0.6); z-index: 60; flex-direction: column; gap: 2px; }
+        .attach-menu.show { display: flex; }
+        .attach-menu button { background: transparent; border: none; color: #e3e3e3; text-align: left; padding: 10px 12px; border-radius: 10px; cursor: pointer; font-size: 14px; }
+        .attach-menu button:hover { background: rgba(168, 199, 250, 0.15); }
+
         /* ===== เพิ่มใหม่: หน้าต่างกล้องสด (live camera) สำหรับถ่ายรูปส่งให้ ETC ดูโดยตรง ไม่ต้องออกไปแอปกล้องแยก ===== */
         .camera-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(5, 2, 16, 0.9); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 70; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; }
         .camera-modal-overlay.show { display: flex; }
@@ -728,11 +735,16 @@
                     </div>
                 </div>
                 <div class="gemini-input-box">
-                    <!-- ===== เพิ่มใหม่: ปุ่มแนบรูปภาพ ให้ AI (qwen3.6-27b) ดูภาพและวิเคราะห์ได้ ===== -->
+                    <!-- ===== แก้ไข: รวมปุ่มแนบรูป (📷) กับปุ่มถ่ายรูปสด (📸) เดิม ให้เหลือปุ่มเดียว กดแล้วเด้งเมนูเล็กๆ ให้เลือกแทน
+                    ลดความรกของแถบเครื่องมือ และเป็นรูปแบบที่คุ้นเคยกว่า (คล้ายปุ่ม + ในแอปแชททั่วไป) ===== -->
                     <input type="file" id="imageFileInput" accept="image/*" style="display:none" onchange="handleImageAttach(event)">
-                    <button class="send-arrow-btn" onclick="document.getElementById('imageFileInput').click()" title="แนบรูปภาพให้ ETC ดู">📷</button>
-                    <!-- ===== เพิ่มใหม่: ปุ่มเปิดกล้องสด ถ่ายรูปแล้วดูตัวอย่างก่อนส่งให้ ETC ดู (ต่างจากปุ่ม 📷 ที่เลือกไฟล์ที่มีอยู่แล้ว) ===== -->
-                    <button class="send-arrow-btn" onclick="openCameraModal()" title="ถ่ายรูปสดส่งให้ ETC ดู">📸</button>
+                    <div class="attach-menu-wrapper">
+                        <button class="send-arrow-btn" onclick="toggleAttachMenu()" title="แนบรูปหรือถ่ายรูป">➕</button>
+                        <div id="attachMenu" class="attach-menu">
+                            <button onclick="closeAttachMenu(); openCameraModal();">📸 ถ่ายรูป</button>
+                            <button onclick="closeAttachMenu(); document.getElementById('imageFileInput').click();">🖼️ เลือกจากเครื่อง</button>
+                        </div>
+                    </div>
                     <!-- ===== แก้ไข: เพิ่ม autocomplete="off" และ name แบบสุ่ม เพื่อปิดการจำคำที่เคยพิมพ์ของเบราว์เซอร์ (popup "Saved info") ===== -->
                     <input type="text" id="userInputText" name="etc-chat-input-no-save" autocomplete="off" placeholder="พิมพ์ข้อความที่นี่..." onkeypress="if(event.key==='Enter') handleSendAction()">
                     <!-- ===== เพิ่มใหม่: ปุ่มไมโครโฟนพิมพ์ด้วยเสียง ซ่อนไว้เป็นค่าเริ่มต้น (โชว์เมื่อเปิดสวิตช์ในหน้าตั้งค่า) ===== -->
@@ -1707,6 +1719,21 @@
             };
             reader.readAsDataURL(file);
         }
+        // ===== เพิ่มใหม่: เปิด/ปิดเมนูเล็กๆ ของปุ่ม ➕ (ถ่ายรูป / เลือกจากเครื่อง) =====
+        function toggleAttachMenu() {
+            document.getElementById("attachMenu").classList.toggle("show");
+        }
+        function closeAttachMenu() {
+            document.getElementById("attachMenu").classList.remove("show");
+        }
+        // ปิดเมนูอัตโนมัติเมื่อคลิกที่อื่นนอกเมนู (กันเมนูค้างเปิดอยู่)
+        document.addEventListener("click", function (e) {
+            const wrapper = document.querySelector(".attach-menu-wrapper");
+            if (wrapper && !wrapper.contains(e.target)) {
+                closeAttachMenu();
+            }
+        });
+
         function clearImageAttachment() {
             attachedImageBase64 = null;
             document.getElementById("imagePreviewBox").style.display = "none";
