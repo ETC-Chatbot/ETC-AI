@@ -4,24 +4,47 @@
 //
 // เรียกใช้ได้ที่ URL: https://<โดเมนเว็บ>/api/generate-image
 //
-// หน้าที่ของไฟล์นี้ คือทำตัวเป็น "คนกลาง" ระหว่างเว็บของเรา กับ Google Gemini API
+// หน้าที่ของไฟล์นี้ คือทำตัวเป็น "คนกลาง" ระหว่างเว็บของเรา กับ Cloudflare Workers AI
 // - รับ prompt (คำอธิบายภาพ) จากหน้าเว็บ
-// - แนบ GEMINI_API_KEY (เก็บลับไว้ใน Environment Variable ของ Vercel เหมือน GROQ_API_KEY)
-// - ส่งไปให้โมเดล gemini-2.5-flash-image สร้างภาพ แล้วส่งภาพ (base64) กลับมาให้หน้าเว็บ
+// - เช็คคำต้องห้ามเบื้องต้นก่อนส่งไป (ตัวกรองของเราเอง เพราะ Workers AI ไม่มีตัวกรองในตัวแบบ Gemini)
+// - แนบ CF_API_TOKEN (เก็บลับไว้ใน Environment Variable ของ Vercel เหมือน GROQ_API_KEY)
+// - ส่งไปให้โมเดล flux-1-schnell สร้างภาพ แล้วส่งภาพ (base64) กลับมาให้หน้าเว็บ
 //
-// วิธีได้ GEMINI_API_KEY (ฟรี ไม่ต้องผูกบัตรเครดิต):
-// 1. เข้า https://aistudio.google.com/apikey (ต้อง login ด้วยบัญชี Google)
-// 2. กด "Create API key" เลือกโปรเจกต์ (หรือสร้างใหม่) แล้วคัดลอก key ที่ได้
-// 3. ไปตั้งค่าใน Vercel: โปรเจกต์ ETC-AI > Settings > Environment Variables
-//    ตั้งชื่อ GEMINI_API_KEY แล้ววาง key ที่คัดลอกมา > Save > Redeploy โปรเจกต์
+// ===== แก้ไข (สำคัญ): เดิมใช้ Gemini API แต่โควตาฟรีของโมเดลสร้างภาพเจอบั๊กจาก Google เอง
+// (ขึ้น quota limit: 0 แม้ยังไม่ได้ผูกบัตร) จึงเปลี่ยนมาใช้ Cloudflare Workers AI แทน
+// เพราะฟรีจริง ไม่ต้องผูกบัตร แต่ต้องเขียนตัวกรองคำต้องห้ามเองเพิ่ม เพราะโมเดลนี้ไม่มีตัวกรองในตัว =====
+//
+// วิธีได้ CF_ACCOUNT_ID และ CF_API_TOKEN (ฟรี ไม่ต้องผูกบัตรเครดิต):
+// 1. สมัครบัญชีที่ https://dash.cloudflare.com/sign-up
+// 2. เข้าเมนู "Workers & Pages" จะเห็น Account ID อยู่ด้านขวาของหน้า คัดลอกเก็บไว้
+// 3. คลิกรูปโปรไฟล์ > My Profile > API Tokens > Create Token > เลือกเท็มเพลต "Workers AI (Beta)"
+//    กด Continue to summary > Create Token แล้วคัดลอกเก็บไว้ (เห็นครั้งเดียว)
+// 4. ไปตั้งค่าใน Vercel: โปรเจกต์ ETC-AI > Settings > Environment Variables
+//    ตั้งชื่อ CF_ACCOUNT_ID และ CF_API_TOKEN ตามลำดับ > Save > Redeploy โปรเจกต์
 // ============================================================
 
 export const config = {
   runtime: "edge",
 };
 
-const MODEL_NAME = "gemini-2.5-flash-image";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent`;
+const MODEL_NAME = "@cf/black-forest-labs/flux-1-schnell";
+
+// ===== เพิ่มใหม่: ตัวกรองคำต้องห้ามเบื้องต้น (ทำหน้าที่แทนตัวกรองในตัวของ Gemini ที่ไม่มีใน Workers AI)
+// เช็คทั้งภาษาไทยและอังกฤษ ครอบคลุมหมวดเนื้อหาทางเพศ ความรุนแรง และเนื้อหาที่เกี่ยวกับผู้เยาว์ในทางไม่เหมาะสม
+// รายการนี้เป็นแค่ชั้นป้องกันแรก ไม่ใช่ตัวกรองสมบูรณ์แบบ 100% แต่ช่วยตัดคำขอที่ชัดเจนว่าไม่เหมาะสมออกไปก่อน =====
+const BLOCKED_KEYWORDS = [
+  "porn", "nude", "naked", "sex", "explicit", "nsfw", "erotic", "hentai",
+  "โป๊", "เปลือย", "เซ็กส์", "ลามก", "ข่มขืน", "อนาจาร",
+  "gore", "kill", "murder", "corpse", "suicide", "self-harm",
+  "ฆ่า", "ศพ", "ฆ่าตัวตาย", "ทำร้ายตัวเอง",
+  "child", "kid", "minor", "loli", "toddler",
+  "เด็ก", "เยาวชน", "นักเรียน",
+];
+
+function containsBlockedContent(text) {
+  const lower = text.toLowerCase();
+  return BLOCKED_KEYWORDS.some(kw => lower.includes(kw.toLowerCase()));
+}
 
 export default async function handler(req) {
   if (req.method !== "POST") {
@@ -41,63 +64,52 @@ export default async function handler(req) {
       });
     }
 
-    const geminiResponse = await fetch(GEMINI_URL, {
+    // ===== เพิ่มใหม่: เช็คคำต้องห้ามก่อนส่งไปสร้างภาพเลย ตัดปัญหาตั้งแต่ต้นทาง =====
+    if (containsBlockedContent(prompt)) {
+      return new Response(JSON.stringify({ error: "เนื้อหาไม่เหมาะสม", blocked: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const accountId = process.env.CF_ACCOUNT_ID;
+    const apiToken = process.env.CF_API_TOKEN;
+    const CF_URL = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${MODEL_NAME}`;
+
+    const cfResponse = await fetch(CF_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        // process.env.GEMINI_API_KEY ถูกดึงมาจาก Environment Variable ที่ตั้งไว้ใน Vercel
-        // (ไม่มีทางโผล่ในโค้ดฝั่ง frontend เด็ดขาด เหมือนกับ GROQ_API_KEY)
-        "x-goog-api-key": process.env.GEMINI_API_KEY,
+        // process.env.CF_API_TOKEN ถูกดึงมาจาก Environment Variable ที่ตั้งไว้ใน Vercel
+        "Authorization": `Bearer ${apiToken}`,
       },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseModalities: ["TEXT", "IMAGE"],
-        },
-        // ===== เพิ่มใหม่: ตั้งค่าตัวกรองความปลอดภัยแบบเข้มไว้ชัดเจน (นอกเหนือจากตัวกรองพื้นฐานของ Gemini เอง)
-        // BLOCK_LOW_AND_ABOVE คือระดับเข้มที่สุด ป้องกันไว้ก่อนเพราะเว็บนี้เป็นเว็บสาธารณะ ใครก็เข้าถึงได้ =====
-        safetySettings: [
-          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_LOW_AND_ABOVE" },
-          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_LOW_AND_ABOVE" },
-          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_LOW_AND_ABOVE" },
-          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_LOW_AND_ABOVE" },
-        ],
+        prompt: prompt,
+        // จำนวนรอบประมวลผลของ flux-1-schnell ยิ่งมากยิ่งคมชัดแต่ช้าลง ค่า 4 คือค่าที่โมเดลนี้ออกแบบมาให้เร็วและดีพอ
+        num_steps: 4,
       }),
     });
 
-    if (!geminiResponse.ok) {
-      const errorText = await geminiResponse.text();
-      return new Response(JSON.stringify({ error: "Gemini API error", detail: errorText }), {
-        status: geminiResponse.status,
+    if (!cfResponse.ok) {
+      const errorText = await cfResponse.text();
+      return new Response(JSON.stringify({ error: "Cloudflare Workers AI error", detail: errorText }), {
+        status: cfResponse.status,
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    const data = await geminiResponse.json();
-    const candidate = data.candidates && data.candidates[0];
+    const data = await cfResponse.json();
 
-    // ===== เพิ่มใหม่: ถ้า Gemini บล็อกคำขอนี้เพราะเนื้อหาไม่เหมาะสม จะไม่มีรูปกลับมา ให้แจ้งฝั่งหน้าเว็บรู้ว่า "โดนบล็อก"
-    // เพื่อให้หน้าเว็บแสดงข้อความสุภาพแทน error ดิบๆ =====
-    if (!candidate || candidate.finishReason === "IMAGE_SAFETY" || candidate.finishReason === "SAFETY") {
-      return new Response(JSON.stringify({ error: "เนื้อหาถูกบล็อกโดยระบบความปลอดภัย", blocked: true }), {
+    // ===== เพิ่มใหม่: ตรวจสอบว่า Cloudflare แจ้ง error กลับมาในตัว response เอง (success: false) หรือไม่ =====
+    if (!data.success || !data.result || !data.result.image) {
+      return new Response(JSON.stringify({ error: "ไม่พบรูปภาพในคำตอบจาก Cloudflare", detail: JSON.stringify(data.errors || data) }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    // หารูปภาพ (inlineData) จากส่วน parts ของคำตอบ Gemini
-    const imagePart = (candidate.content?.parts || []).find(p => p.inlineData);
-
-    if (!imagePart) {
-      return new Response(JSON.stringify({ error: "ไม่พบรูปภาพในคำตอบจาก Gemini", blocked: true }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    const { mimeType, data: base64Data } = imagePart.inlineData;
-
-    return new Response(JSON.stringify({ image: `data:${mimeType};base64,${base64Data}` }), {
+    // flux-1-schnell ส่งภาพกลับมาเป็น base64 ล้วนๆ (ไม่มี prefix data:) ต้องเติม prefix เองก่อนส่งให้หน้าเว็บ
+    return new Response(JSON.stringify({ image: `data:image/jpeg;base64,${data.result.image}` }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
