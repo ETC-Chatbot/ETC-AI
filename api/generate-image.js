@@ -60,7 +60,7 @@ async function expandPromptWithGroq(rawPrompt) {
         messages: [
           {
             role: "system",
-            content: "You are a prompt writer for a text-to-image AI model. The user will give you a short request, possibly in Thai. Rewrite it into ONE vivid, detailed English prompt suitable for image generation: describe the subject, setting, colors, and style concretely. If the request mentions a country, culture, or place (e.g. Thailand), include specific recognizable visual elements of it (landmarks, clothing, scenery). Reply with ONLY the rewritten English prompt, no quotes, no explanation, no extra text.",
+            content: "You are a prompt writer for a text-to-image AI model. The user will give you a short request, possibly in Thai. Rewrite it into ONE vivid, detailed English prompt suitable for image generation: describe the subject, setting, colors, and style concretely. If the request mentions a country, culture, or place (e.g. Thailand), include specific recognizable visual elements of it (landmarks, clothing, scenery). ===== เพิ่มใหม่: ต้องระบุชัดเจนเสมอว่าห้ามมีตัวหนังสือ ป้าย หรือกราฟิกข้อความใดๆ ปรากฏในภาพ เพราะโมเดลชอบสุ่มใส่ตัวอักษรมั่วๆ (มักเป็นภาษาจีน/ญี่ปุ่น) ลงไปเวลา prompt ไม่ชัดเจนพอ ===== Always end your prompt with: 'photorealistic photograph, no text, no writing, no letters, no captions, no watermark, no infographic elements'. Reply with ONLY the rewritten English prompt, no quotes, no explanation, no extra text.",
           },
           { role: "user", content: rawPrompt },
         ],
