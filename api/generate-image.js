@@ -5,33 +5,32 @@
 // เรียกใช้ได้ที่ URL: https://<โดเมนเว็บ>/api/generate-image
 //
 // หน้าที่ของไฟล์นี้ คือทำตัวเป็น "คนกลาง" ระหว่างเว็บของเรา กับ Cloudflare Workers AI
-// - รับ prompt (คำอธิบายภาพ) จากหน้าเว็บ
-// - เช็คคำต้องห้ามเบื้องต้นก่อนส่งไป (ตัวกรองของเราเอง เพราะ Workers AI ไม่มีตัวกรองในตัวแบบ Gemini)
-// - แนบ CF_API_TOKEN (เก็บลับไว้ใน Environment Variable ของ Vercel เหมือน GROQ_API_KEY)
-// - ส่งไปให้โมเดล flux-1-schnell สร้างภาพ แล้วส่งภาพ (base64) กลับมาให้หน้าเว็บ
-//
-// ===== แก้ไข (สำคัญ): เดิมใช้ Gemini API แต่โควตาฟรีของโมเดลสร้างภาพเจอบั๊กจาก Google เอง
-// (ขึ้น quota limit: 0 แม้ยังไม่ได้ผูกบัตร) จึงเปลี่ยนมาใช้ Cloudflare Workers AI แทน
-// เพราะฟรีจริง ไม่ต้องผูกบัตร แต่ต้องเขียนตัวกรองคำต้องห้ามเองเพิ่ม เพราะโมเดลนี้ไม่มีตัวกรองในตัว =====
+// ขั้นตอนการทำงาน:
+// 1. รับ prompt (คำอธิบายภาพ ภาษาไทยหรืออังกฤษก็ได้) จากหน้าเว็บ
+// 2. เช็คคำต้องห้ามเบื้องต้นก่อน (ตัวกรองของเราเอง เพราะ Workers AI ไม่มีตัวกรองในตัวแบบ Gemini)
+// 3. ===== เพิ่มใหม่: ให้ Groq (โมเดลแชทเดิมที่ใช้อยู่แล้ว) ช่วย "แปล+เติมรายละเอียด" คำขอเป็นภาษาอังกฤษ
+//    ก่อนส่งไปวาดภาพ เพราะ Flux เข้าใจ prompt ภาษาอังกฤษได้แม่นยำกว่าภาษาไทยมาก
+//    (ปัญหาที่เจอก่อนหน้านี้คือส่ง "สร้างรูปประเทศไทย" ตรงๆ แล้วภาพที่ได้ไม่เกี่ยวกับไทยเลย) =====
+// 4. ส่ง prompt ที่แปลแล้วไปให้โมเดล flux-1-schnell สร้างภาพ แล้วส่งภาพ (base64) กลับมาให้หน้าเว็บ
 //
 // วิธีได้ CF_ACCOUNT_ID และ CF_API_TOKEN (ฟรี ไม่ต้องผูกบัตรเครดิต):
 // 1. สมัครบัญชีที่ https://dash.cloudflare.com/sign-up
 // 2. เข้าเมนู "Workers & Pages" จะเห็น Account ID อยู่ด้านขวาของหน้า คัดลอกเก็บไว้
-// 3. คลิกรูปโปรไฟล์ > My Profile > API Tokens > Create Token > เลือกเท็มเพลต "Workers AI (Beta)"
+// 3. คลิกรูปโปรไฟล์ > My Profile > API Tokens > Create Token > เลือกเท็มเพลต "Workers AI"
 //    กด Continue to summary > Create Token แล้วคัดลอกเก็บไว้ (เห็นครั้งเดียว)
 // 4. ไปตั้งค่าใน Vercel: โปรเจกต์ ETC-AI > Settings > Environment Variables
 //    ตั้งชื่อ CF_ACCOUNT_ID และ CF_API_TOKEN ตามลำดับ > Save > Redeploy โปรเจกต์
+// (ใช้ GROQ_API_KEY ตัวเดิมที่มีอยู่แล้วในโปรเจกต์ ไม่ต้องตั้งค่าเพิ่ม)
 // ============================================================
 
 export const config = {
   runtime: "edge",
 };
 
-const MODEL_NAME = "@cf/black-forest-labs/flux-1-schnell";
+const IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell";
+const CHAT_MODEL = "qwen/qwen3.6-27b"; // โมเดลเดียวกับที่ใช้ใน chat.js
 
 // ===== เพิ่มใหม่: ตัวกรองคำต้องห้ามเบื้องต้น (ทำหน้าที่แทนตัวกรองในตัวของ Gemini ที่ไม่มีใน Workers AI)
-// เช็คทั้งภาษาไทยและอังกฤษ ครอบคลุมหมวดเนื้อหาทางเพศ ความรุนแรง และเนื้อหาที่เกี่ยวกับผู้เยาว์ในทางไม่เหมาะสม
-// รายการนี้เป็นแค่ชั้นป้องกันแรก ไม่ใช่ตัวกรองสมบูรณ์แบบ 100% แต่ช่วยตัดคำขอที่ชัดเจนว่าไม่เหมาะสมออกไปก่อน =====
 const BLOCKED_KEYWORDS = [
   "porn", "nude", "naked", "sex", "explicit", "nsfw", "erotic", "hentai",
   "โป๊", "เปลือย", "เซ็กส์", "ลามก", "ข่มขืน", "อนาจาร",
@@ -44,6 +43,42 @@ const BLOCKED_KEYWORDS = [
 function containsBlockedContent(text) {
   const lower = text.toLowerCase();
   return BLOCKED_KEYWORDS.some(kw => lower.includes(kw.toLowerCase()));
+}
+
+// ===== เพิ่มใหม่: ให้ Groq ช่วยแปล+เติมรายละเอียด prompt ให้เป็นภาษาอังกฤษที่ชัดเจน ก่อนส่งไปวาดภาพ
+// ถ้าเรียก Groq ไม่สำเร็จด้วยเหตุผลใดก็ตาม ให้ fallback กลับไปใช้ prompt เดิมที่ผู้ใช้พิมพ์มา (กันระบบล่มทั้งหมด) =====
+async function expandPromptWithGroq(rawPrompt) {
+  try {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: CHAT_MODEL,
+        messages: [
+          {
+            role: "system",
+            content: "You are a prompt writer for a text-to-image AI model. The user will give you a short request, possibly in Thai. Rewrite it into ONE vivid, detailed English prompt suitable for image generation: describe the subject, setting, colors, and style concretely. If the request mentions a country, culture, or place (e.g. Thailand), include specific recognizable visual elements of it (landmarks, clothing, scenery). Reply with ONLY the rewritten English prompt, no quotes, no explanation, no extra text.",
+          },
+          { role: "user", content: rawPrompt },
+        ],
+        temperature: 0.7,
+        max_tokens: 200,
+        stream: false,
+      }),
+    });
+
+    if (!res.ok) return rawPrompt;
+
+    const data = await res.json();
+    const expanded = data.choices?.[0]?.message?.content?.trim();
+    return expanded || rawPrompt;
+  } catch {
+    // ถ้าเชื่อมต่อ Groq มีปัญหาอะไรก็ตาม ให้ใช้ prompt เดิมแทน ไม่ให้ทั้งฟีเจอร์พังไปด้วย
+    return rawPrompt;
+  }
 }
 
 export default async function handler(req) {
@@ -64,8 +99,19 @@ export default async function handler(req) {
       });
     }
 
-    // ===== เพิ่มใหม่: เช็คคำต้องห้ามก่อนส่งไปสร้างภาพเลย ตัดปัญหาตั้งแต่ต้นทาง =====
+    // เช็คคำต้องห้ามจาก prompt ต้นฉบับก่อนเลย
     if (containsBlockedContent(prompt)) {
+      return new Response(JSON.stringify({ error: "เนื้อหาไม่เหมาะสม", blocked: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // ===== เพิ่มใหม่: แปล+เติมรายละเอียด prompt เป็นภาษาอังกฤษก่อนส่งไปวาด =====
+    const enhancedPrompt = await expandPromptWithGroq(prompt);
+
+    // เช็คคำต้องห้ามอีกรอบกับ prompt ที่แปลแล้ว เผื่อการแปลหลุดคำไม่เหมาะสมออกมา
+    if (containsBlockedContent(enhancedPrompt)) {
       return new Response(JSON.stringify({ error: "เนื้อหาไม่เหมาะสม", blocked: true }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -74,19 +120,17 @@ export default async function handler(req) {
 
     const accountId = process.env.CF_ACCOUNT_ID;
     const apiToken = process.env.CF_API_TOKEN;
-    const CF_URL = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${MODEL_NAME}`;
+    const CF_URL = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${IMAGE_MODEL}`;
 
     const cfResponse = await fetch(CF_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        // process.env.CF_API_TOKEN ถูกดึงมาจาก Environment Variable ที่ตั้งไว้ใน Vercel
         "Authorization": `Bearer ${apiToken}`,
       },
       body: JSON.stringify({
-        prompt: prompt,
-        // ===== แก้ไข: ชื่อพารามิเตอร์ที่ถูกต้องคือ "steps" ไม่ใช่ "num_steps" (ใส่ผิดไปตอนแรก ทำให้ Cloudflare ปฏิเสธ request)
-        // ค่าเริ่มต้นของโมเดลนี้คือ 4 และสูงสุดได้ 8 ยิ่งมากยิ่งคมชัดแต่ช้าลง =====
+        prompt: enhancedPrompt,
+        // ===== แก้ไข: ชื่อพารามิเตอร์ที่ถูกต้องคือ "steps" ไม่ใช่ "num_steps" =====
         steps: 4,
       }),
     });
@@ -101,7 +145,6 @@ export default async function handler(req) {
 
     const data = await cfResponse.json();
 
-    // ===== เพิ่มใหม่: ตรวจสอบว่า Cloudflare แจ้ง error กลับมาในตัว response เอง (success: false) หรือไม่ =====
     if (!data.success || !data.result || !data.result.image) {
       return new Response(JSON.stringify({ error: "ไม่พบรูปภาพในคำตอบจาก Cloudflare", detail: JSON.stringify(data.errors || data) }), {
         status: 200,
@@ -109,7 +152,6 @@ export default async function handler(req) {
       });
     }
 
-    // flux-1-schnell ส่งภาพกลับมาเป็น base64 ล้วนๆ (ไม่มี prefix data:) ต้องเติม prefix เองก่อนส่งให้หน้าเว็บ
     return new Response(JSON.stringify({ image: `data:image/jpeg;base64,${data.result.image}` }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
