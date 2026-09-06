@@ -131,13 +131,15 @@
 
         /* ===== เพิ่มใหม่: เมนูเล็กๆ ที่เด้งขึ้นมาตอนกดปุ่ม ➕ ให้เลือกระหว่าง "ถ่ายรูป" กับ "เลือกจากเครื่อง" ===== */
         .attach-menu-wrapper { position: relative; display: inline-block; }
-        .attach-menu { display: none; position: absolute; bottom: calc(100% + 10px); left: 0; background: rgba(38, 26, 64, 0.97); backdrop-filter: blur(10px); border: 1px solid rgba(168, 199, 250, 0.25); border-radius: 16px; padding: 6px; min-width: 170px; max-width: calc(100vw - 40px); box-shadow: 0 8px 24px rgba(0,0,0,0.6); z-index: 90; flex-direction: column; gap: 2px; }
+        /* ===== แก้ไข: เปลี่ยนจากเปิด "ด้านบน" (bottom: calc(100% + 10px)) เป็นเปิด "ด้านข้าง" ของปุ่ม ➕
+        (left: calc(100% + 10px) = เริ่มวางเมนูจากขอบขวาของปุ่ม + เว้นระยะ 10px) กันไม่ให้เมนูไปทับข้อความสนทนาด้านบน ===== */
+        .attach-menu { display: none; position: absolute; bottom: -4px; left: calc(100% + 10px); background: rgba(38, 26, 64, 0.97); backdrop-filter: blur(10px); border: 1px solid rgba(168, 199, 250, 0.25); border-radius: 16px; padding: 6px; min-width: 170px; max-width: calc(100vw - 40px); box-shadow: 0 8px 24px rgba(0,0,0,0.6); z-index: 90; flex-direction: column; gap: 2px; }
         .attach-menu.show { display: flex; }
         .attach-menu button { background: transparent; border: none; color: #e3e3e3; text-align: left; padding: 10px 12px; border-radius: 10px; cursor: pointer; font-size: 14px; white-space: nowrap; }
         .attach-menu button:hover { background: rgba(168, 199, 250, 0.15); }
         /* ===== เพิ่มใหม่: บนจอมือถือแคบ ปรับเมนูให้ไม่ล้นขอบจอ และลดขนาดตัวอักษร/ระยะห่างลงเล็กน้อย ===== */
         @media (max-width: 400px) {
-            .attach-menu { left: -6px; min-width: 150px; }
+            .attach-menu { min-width: 150px; }
             .attach-menu button { font-size: 13px; padding: 9px 10px; }
         }
 
@@ -947,6 +949,8 @@
                 <div class="camera-status-text" id="cameraStatusText"></div>
                 <div class="camera-controls">
                     <button class="camera-btn danger" onclick="closeCameraModal()">✕ ปิด</button>
+                    <!-- ===== เพิ่มใหม่: ปุ่มสลับกล้องหน้า/หลัง ===== -->
+                    <button class="camera-btn" id="cameraSwitchBtn" onclick="switchCamera()">🔄 สลับกล้อง</button>
                     <button class="camera-btn primary" id="cameraCaptureBtn" onclick="capturePhoto()">📸 ถ่ายรูป</button>
                     <button class="camera-btn" id="cameraRetakeBtn" onclick="retakePhoto()" style="display:none;">↺ ถ่ายใหม่</button>
                     <button class="camera-btn primary" id="cameraUseBtn" onclick="useCapturedPhoto()" style="display:none;">✓ ใช้รูปนี้</button>
@@ -1392,7 +1396,15 @@
             auth.signInWithPopup(provider)
                 .catch((e) => {
                     // popup-closed-by-user เกิดตอนผู้ใช้ปิด popup เอง ไม่ต้องโชว์ error ก็ได้
-                    if (e.code !== "auth/popup-closed-by-user") {
+                    if (e.code === "auth/popup-closed-by-user") return;
+                    // ===== แก้ไข: log รหัส error จริงไว้ใน console เสมอ กันเจอแค่ข้อความกลางๆ แล้วหาสาเหตุไม่ได้ =====
+                    console.error("Google Sign-In error:", e.code, e.message);
+                    // ===== เพิ่มใหม่: กรณี auth/unauthorized-domain คือโดเมนที่เปิดเว็บอยู่ตอนนี้ (เช่นโดเมนใหม่ที่เพิ่งย้ายมา)
+                    // ยังไม่ถูกเพิ่มใน Firebase Console > Authentication > Settings > Authorized domains
+                    // ต้องไปเพิ่มโดเมนนั้นในหน้านั้นก่อน ถึงจะ signInWithPopup ผ่านได้ =====
+                    if (e.code === "auth/unauthorized-domain") {
+                        showAuthError("โดเมนนี้ยังไม่ได้รับอนุญาตใน Firebase ค่ะ (ไปเพิ่มที่ Firebase Console > Authentication > Settings > Authorized domains)");
+                    } else {
                         showAuthError("เข้าสู่ระบบด้วย Google ไม่สำเร็จค่ะ ลองใหม่อีกครั้ง");
                     }
                 })
@@ -1750,6 +1762,7 @@
         // ใช้ getUserMedia ซึ่งเบราว์เซอร์อนุญาตเฉพาะบน HTTPS เท่านั้น (Vercel เป็น HTTPS อยู่แล้วจึงใช้ได้ปกติ)
         // ============================================================
         let cameraStream = null;      // เก็บ stream กล้องที่เปิดอยู่ ไว้ปิดทีหลัง
+        let currentFacingMode = "environment"; // ===== เพิ่มใหม่: จำว่าตอนนี้ใช้กล้องหน้าหรือหลังอยู่ =====
         let capturedPhotoDataUrl = null; // เก็บรูปที่ถ่ายไว้ รอผู้ใช้กด "ใช้รูปนี้"
 
         async function openCameraModal() {
@@ -1762,6 +1775,8 @@
             document.getElementById("cameraCaptureBtn").style.display = "inline-block";
             document.getElementById("cameraRetakeBtn").style.display = "none";
             document.getElementById("cameraUseBtn").style.display = "none";
+            document.getElementById("cameraSwitchBtn").style.display = "inline-block"; // ===== เพิ่มใหม่ =====
+            currentFacingMode = "environment"; // ===== เพิ่มใหม่: เปิดใหม่ทุกครั้งเริ่มจากกล้องหลังเสมอ =====
             statusText.textContent = "กำลังเปิดกล้องค่ะ...";
             modal.classList.add("show");
 
@@ -1772,7 +1787,7 @@
             }
             try {
                 // facingMode:"environment" = ขอกล้องหลังก่อนเป็นอันดับแรก (เหมาะกับมือถือ) ถ้าไม่มีเบราว์เซอร์จะใช้กล้องที่มีให้เอง
-                cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+                cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode }, audio: false });
                 video.srcObject = cameraStream;
                 statusText.textContent = "";
             } catch (err) {
@@ -1812,6 +1827,7 @@
             document.getElementById("cameraCaptureBtn").style.display = "none";
             document.getElementById("cameraRetakeBtn").style.display = "inline-block";
             document.getElementById("cameraUseBtn").style.display = "inline-block";
+            document.getElementById("cameraSwitchBtn").style.display = "none"; // ===== เพิ่มใหม่: ซ่อนตอนดูตัวอย่างภาพ =====
             // หมายเหตุ: ไม่ปิด stream ตรงนี้ เก็บกล้องเปิดค้างไว้เผื่อกด "ถ่ายใหม่" จะได้ไม่ต้องขอสิทธิ์กล้องซ้ำ
         }
 
@@ -1822,6 +1838,28 @@
             document.getElementById("cameraCaptureBtn").style.display = "inline-block";
             document.getElementById("cameraRetakeBtn").style.display = "none";
             document.getElementById("cameraUseBtn").style.display = "none";
+            document.getElementById("cameraSwitchBtn").style.display = "inline-block"; // ===== เพิ่มใหม่: โชว์กลับมาตอนถ่ายใหม่ =====
+        }
+
+        // ===== เพิ่มใหม่: สลับระหว่างกล้องหน้า/หลัง =====
+        async function switchCamera() {
+            if (!cameraStream) return;
+            const statusText = document.getElementById("cameraStatusText");
+            const newMode = currentFacingMode === "environment" ? "user" : "environment";
+            statusText.textContent = "กำลังสลับกล้องค่ะ...";
+            // ปิด stream เดิมก่อนเปิดตัวใหม่ กันกล้อง 2 ตัวเปิดค้างพร้อมกัน
+            cameraStream.getTracks().forEach(track => track.stop());
+            try {
+                cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: newMode }, audio: false });
+                document.getElementById("cameraVideo").srcObject = cameraStream;
+                currentFacingMode = newMode;
+                statusText.textContent = "";
+            } catch (err) {
+                // อุปกรณ์บางเครื่อง (เช่นโน้ตบุ๊ก) มีกล้องแค่ตัวเดียว สลับไม่ได้ ให้กลับไปใช้ตัวเดิม
+                statusText.textContent = "สลับกล้องไม่สำเร็จค่ะ อุปกรณ์นี้อาจมีกล้องแค่ตัวเดียว";
+                cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode }, audio: false }).catch(() => null);
+                if (cameraStream) document.getElementById("cameraVideo").srcObject = cameraStream;
+            }
         }
 
         function useCapturedPhoto() {
@@ -1846,10 +1884,16 @@
             // คำนาม (รูป/ภาพ) อยู่ในประโยคเดียวกัน ให้ถือว่าต้องการสร้างภาพ ครอบคลุมประโยคธรรมชาติได้กว้างขึ้นมาก =====
             // ===== หมายเหตุ: ไม่ใส่คำว่า "ทำ" เพราะเป็นคำที่พบได้ทั่วไปมาก (เช่นซ่อนอยู่ในคำว่า "ทำไม")
             // ถ้าใส่จะทำให้คำถามทั่วไปเกี่ยวกับรูปภาพที่แนบมาก่อนหน้า ถูกเข้าใจผิดว่าต้องการให้สร้างภาพใหม่ =====
+            // ===== เพิ่มใหม่: ตัดคำที่มี "รูป"/"ภาพ" ปนอยู่แต่ไม่เกี่ยวกับการขอสร้างภาพออกก่อน กันตรวจจับผิดพลาด
+            // (false positive) เช่น "สภาพอากาศ", "รูปแบบ", "ภาพรวม" จะไม่ถูกเข้าใจผิดว่าขอให้วาดภาพ =====
+            const falsePositiveWords = ["รูปแบบ", "สภาพ", "ภาพรวม", "ภาพลักษณ์", "รูปธรรม", "รูปการ", "ภาพพจน์"];
+            let cleanedText = lower;
+            falsePositiveWords.forEach(w => { cleanedText = cleanedText.split(w).join(""); });
+
             const verbs = ["ขอ", "อยากได้", "อยาก", "ช่วย", "สร้าง", "วาด", "แสดง", "โชว์", "เจน", "แต่ง"];
             const nouns = ["รูป", "ภาพ"];
-            const hasVerb = verbs.some(v => lower.includes(v));
-            const hasNoun = nouns.some(n => lower.includes(n));
+            const hasVerb = verbs.some(v => cleanedText.includes(v));
+            const hasNoun = nouns.some(n => cleanedText.includes(n));
             if (hasVerb && hasNoun) return true;
 
             // คำภาษาอังกฤษหรือวลีเฉพาะที่ชัดเจนอยู่แล้วว่าต้องการสร้างภาพ ไม่ต้องเช็คคู่กับคำนามอีก
