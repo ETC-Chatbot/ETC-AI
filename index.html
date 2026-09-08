@@ -131,13 +131,14 @@
 
         /* ===== เพิ่มใหม่: เมนูเล็กๆ ที่เด้งขึ้นมาตอนกดปุ่ม ➕ ให้เลือกระหว่าง "ถ่ายรูป" กับ "เลือกจากเครื่อง" ===== */
         .attach-menu-wrapper { position: relative; display: inline-block; }
-        /* ===== แก้ไข: เปลี่ยนจากเปิด "ด้านบน" (bottom: calc(100% + 10px)) เป็นเปิด "ด้านข้าง" ของปุ่ม ➕
-        (left: calc(100% + 10px) = เริ่มวางเมนูจากขอบขวาของปุ่ม + เว้นระยะ 10px) กันไม่ให้เมนูไปทับข้อความสนทนาด้านบน ===== */
-        .attach-menu { display: none; position: absolute; bottom: -4px; left: calc(100% + 10px); background: rgba(38, 26, 64, 0.97); backdrop-filter: blur(10px); border: 1px solid rgba(168, 199, 250, 0.25); border-radius: 16px; padding: 6px; min-width: 170px; max-width: calc(100vw - 40px); box-shadow: 0 8px 24px rgba(0,0,0,0.6); z-index: 90; flex-direction: column; gap: 2px; }
+        /* ===== แก้ไข: เปลี่ยนจาก position:absolute (ตำแหน่งตายตัวเดาจาก CSS) เป็น position:fixed
+        แล้วให้ JavaScript คำนวณตำแหน่ง top/left จริงตอนเปิดเมนู (ดูฟังก์ชัน positionAttachMenu)
+        กันปัญหาเมนูไปชนข้อความอื่น ไม่ว่าปุ่ม ➕ จะอยู่ตรงไหนของหน้าจอตอนนั้น ===== */
+        .attach-menu { display: none; position: fixed; background: rgba(38, 26, 64, 0.97); backdrop-filter: blur(10px); border: 1px solid rgba(168, 199, 250, 0.25); border-radius: 16px; padding: 6px; min-width: 170px; max-width: calc(100vw - 40px); box-shadow: 0 8px 24px rgba(0,0,0,0.6); z-index: 90; flex-direction: column; gap: 2px; }
         .attach-menu.show { display: flex; }
         .attach-menu button { background: transparent; border: none; color: #e3e3e3; text-align: left; padding: 10px 12px; border-radius: 10px; cursor: pointer; font-size: 14px; white-space: nowrap; }
         .attach-menu button:hover { background: rgba(168, 199, 250, 0.15); }
-        /* ===== เพิ่มใหม่: บนจอมือถือแคบ ปรับเมนูให้ไม่ล้นขอบจอ และลดขนาดตัวอักษร/ระยะห่างลงเล็กน้อย ===== */
+        /* ===== เพิ่มใหม่: บนจอมือถือแคบ ลดขนาดตัวอักษร/ระยะห่างลงเล็กน้อย ===== */
         @media (max-width: 400px) {
             .attach-menu { min-width: 150px; }
             .attach-menu button { font-size: 13px; padding: 9px 10px; }
@@ -1738,7 +1739,38 @@
         }
         // ===== เพิ่มใหม่: เปิด/ปิดเมนูเล็กๆ ของปุ่ม ➕ (ถ่ายรูป / เลือกจากเครื่อง) =====
         function toggleAttachMenu() {
-            document.getElementById("attachMenu").classList.toggle("show");
+            const menu = document.getElementById("attachMenu");
+            const isOpening = !menu.classList.contains("show");
+            if (isOpening) positionAttachMenu(); // คำนวณตำแหน่งใหม่ทุกครั้งก่อนเปิด เผื่อจอหมุนหรือเลื่อนหน้าไปแล้ว
+            menu.classList.toggle("show");
+        }
+
+        // ===== เพิ่มใหม่: คำนวณตำแหน่งเมนู ➕ จากพื้นที่ว่างจริงบนจอ ณ ตอนนั้น (runtime) แทนการเดาตายตัวด้วย CSS
+        // กันปัญหาเมนูไปชนข้อความอื่น ไม่ว่าปุ่ม ➕ จะอยู่ตรงไหนของหน้าจอ (หน้าแรกก่อนเริ่มแชท ซึ่งช่องพิมพ์อยู่กลางจอ
+        // หรือหลังเริ่มแชทแล้วซึ่งช่องพิมพ์เลื่อนไปติดขอบล่างจอ ทั้งสองแบบเมนูจะหาที่ว่างที่เหมาะสมให้เองเสมอ) =====
+        function positionAttachMenu() {
+            const btn = document.querySelector(".attach-menu-wrapper .send-arrow-btn");
+            const menu = document.getElementById("attachMenu");
+            const btnRect = btn.getBoundingClientRect();
+            const menuWidth = Math.min(170, window.innerWidth - 24);
+            const menuHeight = 96; // ความสูงโดยประมาณของเมนู (2 ปุ่ม + padding)
+            const gap = 10;
+
+            // แนวตั้ง: เปิดด้านล่างปุ่มก่อนถ้ามีที่ว่างพอ ถ้าไม่พอ (เช่นปุ่มอยู่ใกล้ขอบล่างจอ) ค่อยเปิดด้านบนแทน
+            const spaceBelow = window.innerHeight - btnRect.bottom;
+            if (spaceBelow >= menuHeight + gap) {
+                menu.style.top = (btnRect.bottom + gap) + "px";
+                menu.style.bottom = "auto";
+            } else {
+                menu.style.bottom = (window.innerHeight - btnRect.top + gap) + "px";
+                menu.style.top = "auto";
+            }
+
+            // แนวนอน: เริ่มชิดขอบซ้ายของปุ่มก่อน ถ้าล้นขอบขวาจอ ให้ดันกลับมาให้พอดีขอบจอแทน
+            let left = btnRect.left;
+            if (left + menuWidth > window.innerWidth - 12) left = window.innerWidth - menuWidth - 12;
+            if (left < 12) left = 12;
+            menu.style.left = left + "px";
         }
         function closeAttachMenu() {
             document.getElementById("attachMenu").classList.remove("show");
@@ -1901,32 +1933,68 @@
             return explicitKw.some(k => lower.includes(k));
         }
 
+        // ===== เพิ่มใหม่: อ่านจำนวนภาพที่ขอจากข้อความ เช่น "สร้างภาพแมว 3 แบบ" หรือ "ขอรูปสองภาพ"
+        // จำกัดสูงสุดไว้ที่ 4 ภาพต่อครั้ง กันไม่ให้ขอเยอะเกินจนใช้โควตาฟรีของ Cloudflare หมดเร็วเกินไป
+        // ถ้าไม่ได้ระบุจำนวน จะคืนค่า 1 (สร้างภาพเดียวตามปกติ) =====
+        function extractImageCount(text) {
+            const MAX_IMAGES = 4;
+            const digitMatch = text.match(/(\d+)\s*(ภาพ|รูป|แบบ)/);
+            if (digitMatch) return Math.min(Math.max(parseInt(digitMatch[1], 10), 1), MAX_IMAGES);
+            const thaiNumberWords = { "หนึ่ง": 1, "สอง": 2, "สาม": 3, "สี่": 4, "ห้า": 5 };
+            for (const [word, num] of Object.entries(thaiNumberWords)) {
+                if (["ภาพ", "รูป", "แบบ"].some(unit => text.includes(word + unit))) {
+                    return Math.min(num, MAX_IMAGES);
+                }
+            }
+            return 1;
+        }
+
         // เรียก backend /api/generate-image เพื่อสร้างภาพ แล้วแสดงผลในบับเบิลแชทของ ETC
-        async function generateImageWithGemini(prompt) {
+        // ===== แก้ไข: เดิมสร้างได้ทีละ 1 ภาพเท่านั้น ตอนนี้รับพารามิเตอร์ count เพื่อสร้างหลายภาพพร้อมกันได้
+        // (เช่น "สร้างภาพแมว 3 แบบ") โดยยิงคำขอไปที่ backend หลายครั้งพร้อมกัน ไม่ใช่ทีละภาพเรียงกัน จะได้เร็วขึ้น =====
+        async function generateImageWithGemini(prompt, count = 1) {
             const cw = document.getElementById("chatWindow");
             const botId = 'imggen-' + Date.now();
-            // แสดงบับเบิลของ ETC พร้อมข้อความ "กำลังวาดภาพ..." ระหว่างรอ
-            cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-bot"><img src="img/ETC.png" class="avatar-img" onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('avatar-fallback');this.innerText='ETC';"><div class="chat-bubble" id="${botId}">ETC กำลังวาดภาพให้อยู่ค่ะ รอสักครู่นะคะ 🎨</div></div>`);
+            const loadingText = count > 1 ? `ETC กำลังวาด ${count} ภาพให้อยู่ค่ะ รอสักครู่นะคะ 🎨` : "ETC กำลังวาดภาพให้อยู่ค่ะ รอสักครู่นะคะ 🎨";
+            cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-bot"><img src="img/ETC.png" class="avatar-img" onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('avatar-fallback');this.innerText='ETC';"><div class="chat-bubble" id="${botId}">${loadingText}</div></div>`);
             cw.scrollTop = cw.scrollHeight;
 
             try {
-                const res = await fetch("/api/generate-image", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ prompt })
-                });
-                const data = await res.json();
+                // ===== เพิ่มใหม่: ยิงคำขอสร้างภาพพร้อมกันตามจำนวนที่ขอ ใช้ Promise.allSettled กันภาพเดียวพัง
+                // แล้วทำให้ทั้งชุดล้มไปด้วย (ภาพที่เหลือจะยังโชว์ให้ได้ตามปกติ) =====
+                const requests = Array.from({ length: count }, () =>
+                    fetch("/api/generate-image", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ prompt })
+                    }).then(res => res.json().then(data => ({ ok: res.ok, data })))
+                );
+                const results = await Promise.allSettled(requests);
                 const bubble = document.getElementById(botId);
 
-                if (!res.ok || !data.image) {
-                    // ===== เพิ่มใหม่: ถ้าโดนตัวกรองความปลอดภัยของ Gemini บล็อก ให้แจ้งเหตุผลสุภาพแทน error ดิบๆ =====
-                    bubble.innerText = data.blocked
+                const images = results
+                    .filter(r => r.status === "fulfilled" && r.value.ok && r.value.data.image)
+                    .map(r => r.value.data.image);
+
+                if (images.length === 0) {
+                    // ===== เพิ่มใหม่: ถ้าโดนตัวกรองความปลอดภัยบล็อก ให้แจ้งเหตุผลสุภาพแทน error ดิบๆ =====
+                    const blockedResult = results.find(r => r.status === "fulfilled" && r.value.data?.blocked);
+                    bubble.innerText = blockedResult
                         ? "ขออภัยค่ะ คำขอนี้ ETC ไม่สามารถสร้างภาพให้ได้ เนื่องจากเนื้อหาอาจไม่เหมาะสมค่ะ ลองเปลี่ยนคำอธิบายภาพแล้วลองใหม่ได้นะคะ"
                         : "ขออภัยค่ะ สร้างภาพไม่สำเร็จ ลองใหม่อีกครั้งนะคะ";
                     return;
                 }
-                // แสดงภาพที่สร้างได้ในบับเบิล (data.image เป็น data URL base64 อยู่แล้วจาก backend)
-                bubble.innerHTML = `<img src="${data.image}" style="max-width:100%; border-radius:12px; display:block;">`;
+
+                // ===== เพิ่มใหม่: ถ้าได้หลายภาพ แสดงเรียงเป็นกริด 2 คอลัมน์ ถ้าภาพเดียวแสดงแบบเดิม =====
+                const imagesHtml = images.map(img => `<img src="${img}" style="max-width:100%; border-radius:12px; display:block;">`).join("");
+                bubble.innerHTML = images.length > 1
+                    ? `<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">${imagesHtml}</div>`
+                    : imagesHtml;
+
+                if (images.length < count) {
+                    bubble.innerHTML += `<div style="font-size:12px; opacity:0.75; margin-top:6px;">สร้างสำเร็จ ${images.length} จาก ${count} ภาพที่ขอค่ะ (บางภาพสร้างไม่สำเร็จ ลองใหม่อีกครั้งได้นะคะ)</div>`;
+                }
+
                 cw.scrollTop = cw.scrollHeight;
             } catch (err) {
                 document.getElementById(botId).innerText = "เชื่อมต่อระบบสร้างภาพไม่สำเร็จค่ะ: " + err.message;
@@ -1960,7 +2028,7 @@
                 const cw = document.getElementById("chatWindow");
                 cw.insertAdjacentHTML('beforeend', `<div class="chat-row row-user"><div class="chat-bubble">${text}</div></div>`);
                 cw.scrollTop = cw.scrollHeight;
-                generateImageWithGemini(text);
+                generateImageWithGemini(text, extractImageCount(text)); // ===== แก้ไข: ส่งจำนวนภาพที่ขอไปด้วย =====
                 return;
             }
 
@@ -2057,8 +2125,18 @@
                 speakText(fullResponse); // ===== เพิ่มใหม่: อ่านคำตอบออกเสียง (จะอ่านจริงก็ต่อเมื่อเปิดสวิตช์ "เสียงตอบกลับ" ไว้ในหน้าตั้งค่า) =====
                 checkChatLengthAndWarn(); // ===== เพิ่มใหม่: เช็คว่าแชทยาวเกินไปหรือยัง ถ้าใช่แสดงแบนเนอร์แนะนำให้เริ่มแชทใหม่ =====
             } catch(e) {
-                // ===== แก้ไข: โชว์ error message จริงๆ ในกล่องแชท ช่วยตอน debug (เดิมจะขึ้นแค่ "คำตอบถูกยกเลิกค่ะ" ทุกกรณี) =====
-                document.getElementById(botId).textContent = e.name === "AbortError" ? "คำตอบถูกยกเลิกค่ะ" : `ขออภัยค่ะ เกิดข้อผิดพลาด: ${e.message}`;
+                // ===== แก้ไข: โชว์ error message จริงๆ ในกล่องแชท ช่วยตอน debug (เดิมจะขึ้นแค่ "คำตอบถูกยกเลิกค่ะ" ทุกกรณี)
+                // ===== เพิ่มใหม่: ถ้าเป็น error 429 / rate_limit_exceeded (ใช้โควตาฟรีของ Groq หมดชั่วคราว)
+                // ให้โชว์ข้อความสุภาพแทนการโชว์ JSON ดิบๆ ที่ดูเหมือนเว็บพัง กันผู้ใช้ตกใจ =====
+                let displayMsg;
+                if (e.name === "AbortError") {
+                    displayMsg = "คำตอบถูกยกเลิกค่ะ";
+                } else if (e.message.includes("429") || e.message.includes("rate_limit_exceeded")) {
+                    displayMsg = "ตอนนี้มีคนใช้งาน ETC พร้อมกันเยอะไปหน่อยค่ะ รบกวนรอสักครู่ (ประมาณ 1 นาที) แล้วลองส่งข้อความอีกครั้งนะคะ 🙏";
+                } else {
+                    displayMsg = `ขออภัยค่ะ เกิดข้อผิดพลาด: ${e.message}`;
+                }
+                document.getElementById(botId).textContent = displayMsg;
             } finally {
                 isAiThinking = false; btn.innerText = "➔"; btn.style.color = "#a8c7fa";
             }
