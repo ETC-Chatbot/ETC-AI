@@ -42,7 +42,15 @@ const BLOCKED_KEYWORDS = [
 
 function containsBlockedContent(text) {
   const lower = text.toLowerCase();
-  return BLOCKED_KEYWORDS.some(kw => lower.includes(kw.toLowerCase()));
+  const matched = BLOCKED_KEYWORDS.find(kw => lower.includes(kw.toLowerCase()));
+  // ===== เพิ่มใหม่: log คำที่ไปชนตัวกรองไว้ฝั่งเซิร์ฟเวอร์เท่านั้น (ดูได้ที่ Vercel > โปรเจกต์ > แท็บ Logs)
+  // ไม่โชว์ให้ผู้ใช้เห็นเด็ดขาด ช่วยให้เวลาเจอ false positive (บล็อกทั้งที่คำขอไม่มีปัญหาจริง) รู้สาเหตุแน่ชัด
+  // ว่าคำไหนไปชน แทนที่จะต้องเดา (บ่อยครั้งคำที่ชนไม่ได้มาจากคำที่ผู้ใช้พิมพ์เอง แต่มาจาก prompt ที่ Groq
+  // แปล/เติมรายละเอียดให้เป็นภาษาอังกฤษก่อนส่งไปวาดภาพ) =====
+  if (matched) {
+    console.log("[generate-image] blocked by keyword:", JSON.stringify(matched), "| text:", text);
+  }
+  return !!matched;
 }
 
 // ===== เพิ่มใหม่: ให้ Groq ช่วยแปล+เติมรายละเอียด prompt ให้เป็นภาษาอังกฤษที่ชัดเจน ก่อนส่งไปวาดภาพ
@@ -130,8 +138,10 @@ export default async function handler(req) {
       },
       body: JSON.stringify({
         prompt: enhancedPrompt,
-        // ===== แก้ไข: ชื่อพารามิเตอร์ที่ถูกต้องคือ "steps" ไม่ใช่ "num_steps" =====
-        steps: 4,
+        // ===== แก้ไข: เดิมตั้ง steps ไว้ที่ 4 (ค่าต่ำสุด/ค่าเริ่มต้น) ซึ่งเน้นความเร็วแต่แลกกับความแม่นยำของภาพ
+        // เอกสาร Cloudflare ระบุว่า steps สูงสุดที่โมเดลนี้รองรับคือ 8 และค่ายิ่งสูงยิ่งช่วยให้ภาพตรงกับ prompt มากขึ้น
+        // (แลกกับเวลารอที่นานขึ้นเล็กน้อย และใช้ neuron ต่อภาพเพิ่มขึ้น แต่โควตาฟรียังเหลือเฟือสำหรับใช้งานจริง) =====
+        steps: 8,
       }),
     });
 
