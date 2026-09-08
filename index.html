@@ -1745,12 +1745,32 @@
             menu.classList.toggle("show");
         }
 
+        // ===== แก้ไข (บั๊กสำคัญ): เดิม #attachMenu อยู่ซ้อนอยู่ข้างใน #inputWrapper ซึ่งพอเริ่มแชทแล้วจะได้ class
+        // .is-chatting-input ที่มี transform: translateX(-50%) ติดอยู่ (ไว้จัดกึ่งกลางกล่องพิมพ์แบบ fixed ชิดล่างจอ)
+        // ปัญหาคือ ตามสเปกของ CSS การมี transform อยู่บน "บรรพบุรุษ" ตัวไหนก็ตาม จะสร้าง containing block ใหม่
+        // ให้ลูกหลานที่เป็น position:fixed ทุกตัวโดยอัตโนมัติ ทำให้ #attachMenu (ซึ่งเป็น position:fixed) เลิกอ้างอิง
+        // ตำแหน่งจากขอบจอ (viewport) แล้วไปอ้างอิงจากกรอบของ #inputWrapper แทน ทั้งที่ positionAttachMenu() ด้านล่าง
+        // คำนวณค่า top/left มาจาก getBoundingClientRect() ซึ่งเป็นพิกัดอิงขอบจอเสมอ พอเอาพิกัดแบบขอบจอไปตั้งบน
+        // fixed element ที่อ้างอิงกรอบอื่นไปแล้ว ตำแหน่งเลยเพี้ยนไปไกล (เมนูไปโผล่ผิดที่แบบในภาพที่ส่งมา)
+        // วิธีแก้ที่ตรงจุดคือย้าย DOM ของเมนูออกมาเป็นลูกโดยตรงของ <body> ตั้งแต่โหลดหน้าเว็บเสร็จ เพื่อไม่ให้มี
+        // บรรพบุรุษที่มี transform มาสร้าง containing block บังตำแหน่งได้อีก (ID เดิม จึงยังเรียกใช้งานผ่าน
+        // getElementById("attachMenu") ได้ตามปกติทุกที่ ไม่ต้องแก้จุดอื่น) =====
+        (function moveAttachMenuToBody() {
+            const menu = document.getElementById("attachMenu");
+            if (menu && menu.parentElement !== document.body) {
+                document.body.appendChild(menu);
+            }
+        })();
+
         // ===== เพิ่มใหม่: คำนวณตำแหน่งเมนู ➕ จากพื้นที่ว่างจริงบนจอ ณ ตอนนั้น (runtime) แทนการเดาตายตัวด้วย CSS
         // กันปัญหาเมนูไปชนข้อความอื่น ไม่ว่าปุ่ม ➕ จะอยู่ตรงไหนของหน้าจอ (หน้าแรกก่อนเริ่มแชท ซึ่งช่องพิมพ์อยู่กลางจอ
         // หรือหลังเริ่มแชทแล้วซึ่งช่องพิมพ์เลื่อนไปติดขอบล่างจอ ทั้งสองแบบเมนูจะหาที่ว่างที่เหมาะสมให้เองเสมอ) =====
         function positionAttachMenu() {
             const btn = document.querySelector(".attach-menu-wrapper .send-arrow-btn");
             const menu = document.getElementById("attachMenu");
+            // ===== เพิ่มใหม่: เช็คกันพังแบบเงียบๆ ถ้าหาไม่เจอปุ่ม/เมนู (ไม่ควรเกิดขึ้น แต่ถ้าเกิด จะได้เห็น error
+            // ใน Console (กด F12) ชัดๆ แทนที่จะรู้สึกแค่ว่า "กดแล้วไม่มีอะไรเกิดขึ้นเลย" โดยไม่รู้สาเหตุ =====
+            if (!btn || !menu) { console.error("positionAttachMenu: หา element ไม่เจอ", { btn, menu }); return; }
             const btnRect = btn.getBoundingClientRect();
             const menuWidth = Math.min(170, window.innerWidth - 24);
             const menuHeight = 96; // ความสูงโดยประมาณของเมนู (2 ปุ่ม + padding)
@@ -1776,9 +1796,15 @@
             document.getElementById("attachMenu").classList.remove("show");
         }
         // ปิดเมนูอัตโนมัติเมื่อคลิกที่อื่นนอกเมนู (กันเมนูค้างเปิดอยู่)
+        // ===== แก้ไข: เดิมเช็คแค่ ".attach-menu-wrapper" แต่ตอนนี้ #attachMenu ถูกย้ายออกไปเป็นลูกของ <body> แล้ว
+        // (ไม่ได้อยู่ข้างใน wrapper อีกต่อไป) เลยต้องเช็คเพิ่มว่าคลิกไม่ได้อยู่ในตัวเมนูเองด้วย กันเมนูปิดตัวเองทันที
+        // ที่เปิดขึ้นมา (เพราะคลิกครั้งแรกที่เปิดเมนูก็จะถูกนับเป็น "คลิกนอกเมนู" ไปพร้อมกันด้วยถ้าไม่เช็คจุดนี้) =====
         document.addEventListener("click", function (e) {
             const wrapper = document.querySelector(".attach-menu-wrapper");
-            if (wrapper && !wrapper.contains(e.target)) {
+            const menu = document.getElementById("attachMenu");
+            const clickedInsideWrapper = wrapper && wrapper.contains(e.target);
+            const clickedInsideMenu = menu && menu.contains(e.target);
+            if (!clickedInsideWrapper && !clickedInsideMenu) {
                 closeAttachMenu();
             }
         });
