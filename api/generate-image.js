@@ -75,6 +75,13 @@ async function expandPromptWithGroq(rawPrompt) {
         temperature: 0.7,
         max_tokens: 200,
         stream: false,
+        // ===== แก้ไข (บั๊กสำคัญที่เจอจาก Vercel Logs): qwen3.6-27b เป็น reasoning model ที่ "คิดออกเสียง"
+        // ก่อนตอบเสมอ (ส่งข้อความ <think>...</think> มาก่อนคำตอบจริง) ถ้าไม่ปิดไว้ ส่วนคิดจะโดน max_tokens:200
+        // ตัดกลางคันก่อนถึงคำตอบจริง ทำให้ได้ prompt เป็นแค่เศษข้อความ "กำลังคิด" ที่มักมีคำอย่าง explicit/
+        // inappropriate ปนอยู่ (เพราะโมเดลกำลังวิเคราะห์ความเหมาะสมของคำขอ) แล้วไปโดนตัวกรองคำต้องห้ามของเรา
+        // เองเข้าเต็มๆ (เกิดกับแทบทุก prompt แม้แต่คำขอธรรมดาๆ เพราะไม่เกี่ยวกับเนื้อหาจริงเลย) chat.js ตั้งค่า
+        // นี้ไว้ถูกต้องอยู่แล้ว แต่ไฟล์นี้ลืมตั้ง จึงเป็นสาเหตุที่แท้จริงของปัญหา "สร้างภาพอะไรก็โดนบล็อก" =====
+        reasoning_format: "hidden",
       }),
     });
 
@@ -106,7 +113,7 @@ async function expandPromptWithGroq(rawPrompt) {
 
 export default async function handler(req) {
   // ===== เพิ่มใหม่: ตัวบอกเวอร์ชันโค้ด เช็คได้จาก Vercel > โปรเจกต์ > แท็บ Logs ว่าไฟล์นี้ถูก deploy จริงหรือยัง =====
-  console.log("[generate-image build: 2026-09-09-fix-refusal-fallback]");
+  console.log("[generate-image build: 2026-09-09-fix-reasoning-leak]");
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
