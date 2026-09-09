@@ -82,7 +82,22 @@ async function expandPromptWithGroq(rawPrompt) {
 
     const data = await res.json();
     const expanded = data.choices?.[0]?.message?.content?.trim();
-    return expanded || rawPrompt;
+    if (!expanded) return rawPrompt;
+
+    // ===== เพิ่มใหม่: บางครั้งโมเดลที่ใช้แปล prompt (Groq) ตีความคำสั่งธรรมดาผิดว่าอาจไม่เหมาะสม แล้วตอบกลับ
+    // มาเป็น "ข้อความปฏิเสธ" แทนที่จะเป็น prompt ภาพจริงๆ (เช่น "I cannot create this as it may be considered
+    // inappropriate/explicit") พอเอาข้อความปฏิเสธนั้นไปเช็คกับ containsBlockedContent() ของเราเอง ก็ไปชนคำอย่าง
+    // "explicit"/"inappropriate" เข้าโดยบังเอิญ ทำให้ภาพที่ไม่มีปัญหาอะไรเลยโดนบล็อกผิดๆ ซ้อนอีกชั้น (เช่นกรณี
+    // "ลิงกินกล้วย" ที่ไม่มีอะไรผิดปกติแต่โดนบล็อก) เช็คคร่าวๆ ว่าคำตอบที่ได้ "หน้าตาเหมือนการปฏิเสธ" ไหม
+    // ถ้าใช่ ให้ทิ้งไปแล้วใช้ prompt ต้นฉบับแทน (ดีกว่าปล่อยให้ข้อความปฏิเสธหลุดเข้าไปในระบบ) =====
+    const refusalSignals = ["cannot create", "can't create", "cannot generate", "can't generate", "i'm sorry", "i am sorry", "unable to", "inappropriate", "not able to", "i cannot", "i can't"];
+    const looksLikeRefusal = refusalSignals.some(sig => expanded.toLowerCase().includes(sig));
+    if (looksLikeRefusal) {
+      console.log("[generate-image] Groq expansion ดูเหมือนข้อความปฏิเสธ ใช้ prompt เดิมแทน:", expanded);
+      return rawPrompt;
+    }
+
+    return expanded;
   } catch {
     // ถ้าเชื่อมต่อ Groq มีปัญหาอะไรก็ตาม ให้ใช้ prompt เดิมแทน ไม่ให้ทั้งฟีเจอร์พังไปด้วย
     return rawPrompt;
@@ -90,6 +105,8 @@ async function expandPromptWithGroq(rawPrompt) {
 }
 
 export default async function handler(req) {
+  // ===== เพิ่มใหม่: ตัวบอกเวอร์ชันโค้ด เช็คได้จาก Vercel > โปรเจกต์ > แท็บ Logs ว่าไฟล์นี้ถูก deploy จริงหรือยัง =====
+  console.log("[generate-image build: 2026-09-09-fix-refusal-fallback]");
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
