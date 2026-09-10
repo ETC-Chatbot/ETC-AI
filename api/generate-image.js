@@ -117,7 +117,7 @@ async function expandPromptWithGroq(rawPrompt) {
 
 export default async function handler(req) {
   // ===== เพิ่มใหม่: ตัวบอกเวอร์ชันโค้ด เช็คได้จาก Vercel > โปรเจกต์ > แท็บ Logs ว่าไฟล์นี้ถูก deploy จริงหรือยัง =====
-  console.log("[generate-image build: 2026-09-09-fix-reasoning-leak]");
+  console.log("[generate-image build: 2026-09-09-log-prompts]");
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
@@ -170,6 +170,11 @@ export default async function handler(req) {
     const accountId = process.env.CF_ACCOUNT_ID;
     const apiToken = process.env.CF_API_TOKEN;
     const CF_URL = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${IMAGE_MODEL}`;
+
+    // ===== เพิ่มใหม่: log ทั้ง prompt ต้นฉบับและ prompt ที่แปลแล้วก่อนส่งไปวาดจริงทุกครั้ง (ดูได้ที่ Vercel Logs)
+    // เผื่อภาพที่ได้ไม่ตรงกับที่ขอ จะได้เห็นเลยว่าปัญหาอยู่ที่ขั้นตอนแปล prompt (Groq เข้าใจผิด/หลุดประเด็น)
+    // หรืออยู่ที่ขั้นตอนวาดภาพเอง (Flux ไม่ทำตาม prompt ที่ให้ไปทั้งที่ prompt ถูกต้องแล้ว) =====
+    console.log("[generate-image] raw:", JSON.stringify(prompt), "| enhanced:", JSON.stringify(enhancedPrompt));
 
     const cfResponse = await fetch(CF_URL, {
       method: "POST",
