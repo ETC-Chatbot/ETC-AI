@@ -2011,11 +2011,17 @@
                     .map(r => r.value.data.image);
 
                 if (images.length === 0) {
-                    // ===== เพิ่มใหม่: ถ้าโดนตัวกรองความปลอดภัยบล็อก ให้แจ้งเหตุผลสุภาพแทน error ดิบๆ =====
+                    // ===== แก้ไข: เพิ่มเช็คกรณี realPerson (ขอภาพบุคคลจริง) แยกจากกรณี blocked (เนื้อหาไม่เหมาะสม)
+                    // ใช้ข้อความอธิบายที่ backend ส่งมาให้ตรงๆ เลย เพราะเขียนไว้ชัดเจนอยู่แล้วว่าทำไมทำให้ไม่ได้ =====
+                    const realPersonResult = results.find(r => r.status === "fulfilled" && r.value.data?.realPerson);
                     const blockedResult = results.find(r => r.status === "fulfilled" && r.value.data?.blocked);
-                    bubble.innerText = blockedResult
-                        ? "ขออภัยค่ะ คำขอนี้ ETC ไม่สามารถสร้างภาพให้ได้ เนื่องจากเนื้อหาอาจไม่เหมาะสมค่ะ ลองเปลี่ยนคำอธิบายภาพแล้วลองใหม่ได้นะคะ"
-                        : "ขออภัยค่ะ สร้างภาพไม่สำเร็จ ลองใหม่อีกครั้งนะคะ";
+                    if (realPersonResult) {
+                        bubble.innerText = realPersonResult.value.data.error;
+                    } else if (blockedResult) {
+                        bubble.innerText = "ขออภัยค่ะ คำขอนี้ ETC ไม่สามารถสร้างภาพให้ได้ เนื่องจากเนื้อหาอาจไม่เหมาะสมค่ะ ลองเปลี่ยนคำอธิบายภาพแล้วลองใหม่ได้นะคะ";
+                    } else {
+                        bubble.innerText = "ขออภัยค่ะ สร้างภาพไม่สำเร็จ ลองใหม่อีกครั้งนะคะ";
+                    }
                     return;
                 }
 

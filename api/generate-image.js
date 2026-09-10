@@ -68,7 +68,7 @@ async function expandPromptWithGroq(rawPrompt) {
         messages: [
           {
             role: "system",
-            content: "You are a prompt writer for a text-to-image AI model. The user will give you a short request, possibly in Thai. Rewrite it into ONE vivid, detailed English prompt suitable for image generation: describe the subject, setting, colors, and style concretely. If the request mentions a country, culture, or place (e.g. Thailand), include specific recognizable visual elements of it (landmarks, clothing, scenery). ===== เพิ่มใหม่: ต้องระบุชัดเจนเสมอว่าห้ามมีตัวหนังสือ ป้าย หรือกราฟิกข้อความใดๆ ปรากฏในภาพ เพราะโมเดลชอบสุ่มใส่ตัวอักษรมั่วๆ (มักเป็นภาษาจีน/ญี่ปุ่น) ลงไปเวลา prompt ไม่ชัดเจนพอ ===== Always end your prompt with: 'photorealistic photograph, no text, no writing, no letters, no captions, no watermark, no infographic elements'. Reply with ONLY the rewritten English prompt, no quotes, no explanation, no extra text.",
+            content: "You are a prompt writer for a text-to-image AI model. The user will give you a short request, possibly in Thai. Rewrite it into ONE vivid, detailed English prompt suitable for image generation: describe the subject, setting, colors, and style concretely. If the request mentions a country, culture, or place (e.g. Thailand), include specific recognizable visual elements of it (landmarks, clothing, scenery). ===== เพิ่มใหม่: ต้องระบุชัดเจนเสมอว่าห้ามมีตัวหนังสือ ป้าย หรือกราฟิกข้อความใดๆ ปรากฏในภาพ เพราะโมเดลชอบสุ่มใส่ตัวอักษรมั่วๆ (มักเป็นภาษาจีน/ญี่ปุ่น) ลงไปเวลา prompt ไม่ชัดเจนพอ ===== ===== เพิ่มใหม่: ถ้าคำขอเอ่ยถึงบุคคลจริงที่มีตัวตนและระบุตัวได้ชัดเจน (เช่น นักการเมือง ดารา นักกีฬา ผู้บริหารบริษัท คนดัง หรือใครก็ตามที่เป็นบุคคลสาธารณะที่มีชื่อจริง ไม่ว่าจะระบุชื่อเต็มหรือเรียกแบบย่อ/ตำแหน่ง เช่น 'นายกฯ คนปัจจุบัน') ห้ามเขียน prompt ภาพให้เด็ดขาด ให้ตอบกลับด้วยข้อความนี้เท่านั้น (ไม่ต้องมีอย่างอื่นปนเลย): REAL_PERSON_REQUEST หมายเหตุ: ตัวละครสมมติ, คนทั่วไปที่ไม่มีชื่อ (เช่น 'ผู้ชายใส่สูท'), หรือคนในอาชีพทั่วไปแบบไม่ระบุตัวตน ไม่เข้าเงื่อนไขนี้ สร้าง prompt ได้ตามปกติ ===== Always end your prompt with: 'photorealistic photograph, no text, no writing, no letters, no captions, no watermark, no infographic elements'. Reply with ONLY the rewritten English prompt (or REAL_PERSON_REQUEST if applicable), no quotes, no explanation, no extra text.",
           },
           { role: "user", content: rawPrompt },
         ],
@@ -90,6 +90,10 @@ async function expandPromptWithGroq(rawPrompt) {
     const data = await res.json();
     const expanded = data.choices?.[0]?.message?.content?.trim();
     if (!expanded) return rawPrompt;
+
+    // ===== เพิ่มใหม่: ถ้า Groq ตอบว่าเป็นคำขอภาพบุคคลจริง ส่งค่าพิเศษนี้กลับไปตรงๆ ให้ handler จัดการต่อ
+    // (ไม่ต้องเช็คคำปฏิเสธด้านล่าง เพราะนี่ไม่ใช่การปฏิเสธของ Groq เอง แต่เป็นสัญญาณที่เราสั่งให้ Groq ส่งมาเอง) =====
+    if (expanded === "REAL_PERSON_REQUEST") return "REAL_PERSON_REQUEST";
 
     // ===== เพิ่มใหม่: บางครั้งโมเดลที่ใช้แปล prompt (Groq) ตีความคำสั่งธรรมดาผิดว่าอาจไม่เหมาะสม แล้วตอบกลับ
     // มาเป็น "ข้อความปฏิเสธ" แทนที่จะเป็น prompt ภาพจริงๆ (เช่น "I cannot create this as it may be considered
@@ -141,6 +145,19 @@ export default async function handler(req) {
 
     // ===== เพิ่มใหม่: แปล+เติมรายละเอียด prompt เป็นภาษาอังกฤษก่อนส่งไปวาด =====
     const enhancedPrompt = await expandPromptWithGroq(prompt);
+
+    // ===== เพิ่มใหม่: ถ้าเป็นคำขอภาพบุคคลจริงที่มีตัวตน (นักการเมือง ดารา คนดัง ฯลฯ) ไม่ส่งไปสร้างภาพต่อ
+    // เพราะโมเดลสร้างภาพไม่รู้จักหน้าตาคนจริงแม่นยำอยู่แล้ว (ภาพที่ได้จะไม่ตรงกับตัวจริงแน่ๆ) และการพยายามทำให้
+    // ภาพเหมือนคนจริงมากขึ้นมีความเสี่ยงเรื่องภาพปลอม/บิดเบือนข้อมูล (deepfake) จึงแจ้งข้อจำกัดตรงๆ แทน =====
+    if (enhancedPrompt === "REAL_PERSON_REQUEST") {
+      return new Response(JSON.stringify({
+        error: "ขออภัยค่ะ ETC ไม่สามารถสร้างภาพของบุคคลจริงที่มีตัวตนได้ (เช่น นักการเมือง ดารา หรือคนดัง) เนื่องจากโมเดลสร้างภาพไม่มีข้อมูลหน้าตาคนจริงที่แม่นยำ และเพื่อป้องกันความเสี่ยงเรื่องภาพปลอมค่ะ ลองขอภาพตัวละครสมมติ สิ่งของ หรือสถานที่แทนได้นะคะ",
+        realPerson: true,
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
     // เช็คคำต้องห้ามอีกรอบกับ prompt ที่แปลแล้ว เผื่อการแปลหลุดคำไม่เหมาะสมออกมา
     if (containsBlockedContent(enhancedPrompt)) {
