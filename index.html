@@ -1008,7 +1008,7 @@
         // วิธีเช็ค: กด F12 เปิด Console แล้วรีเฟรชหน้าเว็บ จะเห็นข้อความนี้ขึ้นเป็นบรรทัดแรกๆ เสมอ
         // ถ้าไม่เห็น หรือเห็นเลขเวอร์ชันเก่ากว่านี้ แปลว่าเว็บยังไม่ได้โหลดโค้ดตัวล่าสุด (ยังไม่ deploy สำเร็จ
         // หรือเบราว์เซอร์แคชเก่าค้างอยู่) ทุกครั้งที่แก้โค้ดรอบใหม่ ให้เปลี่ยนเลขวันที่ตรงนี้ด้วย จะได้เทียบง่ายๆ =====
-        console.log("%c[ETC AI build: 2026-09-09-fix-cartoon-detection]", "color:#a8c7fa; font-weight:bold;");
+        console.log("%c[ETC AI build: 2026-09-11-rate-limited-image-message]", "color:#a8c7fa; font-weight:bold;");
         // ============================================================
         // ตัวแปรหลัก
         // ============================================================
@@ -2015,11 +2015,14 @@
                     .map(r => r.value.data.image);
 
                 if (images.length === 0) {
-                    // ===== แก้ไข: เพิ่มเช็คกรณี realPerson (ขอภาพบุคคลจริง) แยกจากกรณี blocked (เนื้อหาไม่เหมาะสม)
-                    // ใช้ข้อความอธิบายที่ backend ส่งมาให้ตรงๆ เลย เพราะเขียนไว้ชัดเจนอยู่แล้วว่าทำไมทำให้ไม่ได้ =====
+                    // ===== แก้ไข: เพิ่มเช็ค rateLimited (แปล prompt ไม่สำเร็จเพราะคนใช้เยอะ) แยกจาก realPerson และ blocked
+                    // เรียงลำดับความสำคัญ: rateLimited > realPerson > blocked > ทั่วไป =====
+                    const rateLimitedResult = results.find(r => r.status === "fulfilled" && r.value.data?.rateLimited);
                     const realPersonResult = results.find(r => r.status === "fulfilled" && r.value.data?.realPerson);
                     const blockedResult = results.find(r => r.status === "fulfilled" && r.value.data?.blocked);
-                    if (realPersonResult) {
+                    if (rateLimitedResult) {
+                        bubble.innerText = rateLimitedResult.value.data.error;
+                    } else if (realPersonResult) {
                         bubble.innerText = realPersonResult.value.data.error;
                     } else if (blockedResult) {
                         bubble.innerText = "ขออภัยค่ะ คำขอนี้ ETC ไม่สามารถสร้างภาพให้ได้ เนื่องจากเนื้อหาอาจไม่เหมาะสมค่ะ ลองเปลี่ยนคำอธิบายภาพแล้วลองใหม่ได้นะคะ";

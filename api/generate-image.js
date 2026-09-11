@@ -95,17 +95,20 @@ async function expandPromptWithGroq(rawPrompt) {
       }),
     });
 
-    // ===== เพิ่มใหม่: log error จริงจาก Groq ไว้เสมอเวลาเรียกไม่สำเร็จ (ก่อนหน้านี้ fallback แบบเงียบๆ
-    // ทำให้ไม่มีทางรู้เลยว่าทำไม prompt ไม่ถูกแปล จนกว่าจะสังเกตว่า raw กับ enhanced เหมือนกันใน log) =====
+    // ===== แก้ไข (บั๊กสำคัญที่เจอจาก Vercel Logs): เดิมพอเรียก Groq ไม่สำเร็จ (เช่นโดน rate limit ตอนมีคน
+    // ทดสอบถี่ๆ ติดกัน) จะเงียบๆ ใช้ prompt ภาษาไทยดิบส่งไปให้ Flux ตรงๆ ซึ่ง Flux เข้าใจอังกฤษเป็นหลัก พอเจอ
+    // ข้อความไทยที่ไม่เข้าใจ เลยวาดภาพมั่วๆ ออกมาไม่ตรงกับคำขอเลย (ผู้ใช้เห็นแค่ภาพผิด ไม่รู้สาเหตุ) เปลี่ยนมาคืนค่า
+    // พิเศษ "EXPANSION_FAILED" แทน ให้ handler ด้านล่างแจ้งผู้ใช้ตรงๆ ว่าระบบมีปัญหาชั่วคราว ให้ลองใหม่ ดีกว่าเดินหน้า
+    // สร้างภาพที่รู้อยู่แล้วว่าจะไม่ตรงแน่ๆ =====
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
       console.log("[generate-image] Groq prompt expansion ล้มเหลว status:", res.status, "| body:", errText);
-      return rawPrompt;
+      return "EXPANSION_FAILED";
     }
 
     const data = await res.json();
     const expanded = data.choices?.[0]?.message?.content?.trim();
-    if (!expanded) return rawPrompt;
+    if (!expanded) return "EXPANSION_FAILED";
 
     // ===== เพิ่มใหม่: ถ้า Groq ตอบว่าเป็นคำขอภาพบุคคลจริง ส่งค่าพิเศษนี้กลับไปตรงๆ ให้ handler จัดการต่อ
     // (ไม่ต้องเช็คคำปฏิเสธด้านล่าง เพราะนี่ไม่ใช่การปฏิเสธของ Groq เอง แต่เป็นสัญญาณที่เราสั่งให้ Groq ส่งมาเอง) =====
@@ -125,15 +128,17 @@ async function expandPromptWithGroq(rawPrompt) {
     }
 
     return expanded;
-  } catch {
-    // ถ้าเชื่อมต่อ Groq มีปัญหาอะไรก็ตาม ให้ใช้ prompt เดิมแทน ไม่ให้ทั้งฟีเจอร์พังไปด้วย
-    return rawPrompt;
+  } catch (err) {
+    // ===== แก้ไข: log error ไว้ด้วย (เดิมไม่มี เลยไม่รู้เลยว่า exception คืออะไรถ้าเกิดขึ้น) และคืนค่า
+    // EXPANSION_FAILED เหมือนกรณี !res.ok ด้านบน แทนที่จะใช้ prompt ดิบ =====
+    console.log("[generate-image] Groq prompt expansion error:", err.message);
+    return "EXPANSION_FAILED";
   }
 }
 
 export default async function handler(req) {
   // ===== เพิ่มใหม่: ตัวบอกเวอร์ชันโค้ด เช็คได้จาก Vercel > โปรเจกต์ > แท็บ Logs ว่าไฟล์นี้ถูก deploy จริงหรือยัง =====
-  console.log("[generate-image build: 2026-09-11-modest-clothing-guard]");
+  console.log("[generate-image build: 2026-09-11-fail-fast-on-expansion-error]");
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
@@ -161,6 +166,18 @@ export default async function handler(req) {
 
     // ===== เพิ่มใหม่: แปล+เติมรายละเอียด prompt เป็นภาษาอังกฤษก่อนส่งไปวาด =====
     const enhancedPrompt = await expandPromptWithGroq(prompt);
+
+    // ===== เพิ่มใหม่: ถ้าแปล prompt ไม่สำเร็จ (เช่นโดน rate limit ของ Groq ตอนมีคนใช้งานถี่ๆ) ไม่ส่งข้อความไทย
+    // ดิบๆ ไปให้ Flux ต่อ (จะได้ภาพมั่วแน่ๆ) แต่แจ้งผู้ใช้ตรงๆ ให้ลองใหม่แทน =====
+    if (enhancedPrompt === "EXPANSION_FAILED") {
+      return new Response(JSON.stringify({
+        error: "ตอนนี้ระบบแปลคำสั่งสร้างภาพมีคนใช้งานพร้อมกันเยอะไปหน่อยค่ะ รบกวนรอสักครู่แล้วลองใหม่อีกครั้งนะคะ 🙏",
+        rateLimited: true,
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
     // ===== เพิ่มใหม่: ถ้าเป็นคำขอภาพบุคคลจริงที่มีตัวตน (นักการเมือง ดารา คนดัง ฯลฯ) ไม่ส่งไปสร้างภาพต่อ
     // เพราะโมเดลสร้างภาพไม่รู้จักหน้าตาคนจริงแม่นยำอยู่แล้ว (ภาพที่ได้จะไม่ตรงกับตัวจริงแน่ๆ) และการพยายามทำให้
