@@ -85,11 +85,23 @@ async function expandPromptWithGroq(rawPrompt) {
         // inappropriate ปนอยู่ (เพราะโมเดลกำลังวิเคราะห์ความเหมาะสมของคำขอ) แล้วไปโดนตัวกรองคำต้องห้ามของเรา
         // เองเข้าเต็มๆ (เกิดกับแทบทุก prompt แม้แต่คำขอธรรมดาๆ เพราะไม่เกี่ยวกับเนื้อหาจริงเลย) chat.js ตั้งค่า
         // นี้ไว้ถูกต้องอยู่แล้ว แต่ไฟล์นี้ลืมตั้ง จึงเป็นสาเหตุที่แท้จริงของปัญหา "สร้างภาพอะไรก็โดนบล็อก" =====
-        reasoning_format: "hidden",
+        // ===== แก้ไข (บั๊กสำคัญรอบ 2 ที่เจอจาก Vercel Logs): ตอนสลับมาใช้ openai/gpt-oss-20b แทน qwen แล้ว
+        // ยังใช้พารามิเตอร์ reasoning_format: "hidden" ค้างไว้ แต่ตระกูล GPT-OSS ของ Groq ไม่ใช้ชื่อพารามิเตอร์นี้
+        // (เอกสาร Groq ระบุว่า GPT-OSS ใช้ "include_reasoning: false" แทน) พอส่งชื่อพารามิเตอร์ผิดตระกูลโมเดลไป
+        // Groq ปฏิเสธคำขอ (res.ok เป็น false) โค้ดเลย fallback กลับไปใช้ prompt ภาษาไทยดิบๆ แบบเงียบๆ (เห็นได้จาก
+        // log ที่ raw กับ enhanced เหมือนกันเป๊ะทุกครั้ง) ทำให้ Flux ได้รับข้อความไทยที่มันไม่เข้าใจ แล้ววาดภาพมั่วออกมา
+        // ไม่ตรงกับคำขอเลย (นี่คือสาเหตุจริงของปัญหา "ภาพไม่ตรง" ที่เจอมาตลอดหลังเปลี่ยนโมเดล) =====
+        include_reasoning: false,
       }),
     });
 
-    if (!res.ok) return rawPrompt;
+    // ===== เพิ่มใหม่: log error จริงจาก Groq ไว้เสมอเวลาเรียกไม่สำเร็จ (ก่อนหน้านี้ fallback แบบเงียบๆ
+    // ทำให้ไม่มีทางรู้เลยว่าทำไม prompt ไม่ถูกแปล จนกว่าจะสังเกตว่า raw กับ enhanced เหมือนกันใน log) =====
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      console.log("[generate-image] Groq prompt expansion ล้มเหลว status:", res.status, "| body:", errText);
+      return rawPrompt;
+    }
 
     const data = await res.json();
     const expanded = data.choices?.[0]?.message?.content?.trim();
@@ -121,7 +133,7 @@ async function expandPromptWithGroq(rawPrompt) {
 
 export default async function handler(req) {
   // ===== เพิ่มใหม่: ตัวบอกเวอร์ชันโค้ด เช็คได้จาก Vercel > โปรเจกต์ > แท็บ Logs ว่าไฟล์นี้ถูก deploy จริงหรือยัง =====
-  console.log("[generate-image build: 2026-09-09-separate-model]");
+  console.log("[generate-image build: 2026-09-10-fix-gpt-oss-param]");
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
