@@ -1008,7 +1008,7 @@
         // วิธีเช็ค: กด F12 เปิด Console แล้วรีเฟรชหน้าเว็บ จะเห็นข้อความนี้ขึ้นเป็นบรรทัดแรกๆ เสมอ
         // ถ้าไม่เห็น หรือเห็นเลขเวอร์ชันเก่ากว่านี้ แปลว่าเว็บยังไม่ได้โหลดโค้ดตัวล่าสุด (ยังไม่ deploy สำเร็จ
         // หรือเบราว์เซอร์แคชเก่าค้างอยู่) ทุกครั้งที่แก้โค้ดรอบใหม่ ให้เปลี่ยนเลขวันที่ตรงนี้ด้วย จะได้เทียบง่ายๆ =====
-        console.log("%c[ETC AI build: 2026-09-11-rate-limited-image-message]", "color:#a8c7fa; font-weight:bold;");
+        console.log("%c[ETC AI build: 2026-09-11-fix-mobile-keyboard-input-hidden]", "color:#a8c7fa; font-weight:bold;");
         // ============================================================
         // ตัวแปรหลัก
         // ============================================================
@@ -1767,6 +1767,29 @@
                 document.body.appendChild(menu);
             }
         })();
+
+        // ===== เพิ่มใหม่ (แก้บั๊ก: กดกล่องพิมพ์บนมือถือแล้วกล่องพิมพ์หายไป): กล่องพิมพ์หลังเริ่มแชทแล้วใช้
+        // .is-chatting-input ที่มี "position: fixed; bottom: 16px" ปัญหาคือพอแป้นพิมพ์มือถือเด้งขึ้นมา เบราว์เซอร์
+        // ส่วนใหญ่ยังคำนวณตำแหน่ง fixed จากความสูงจอเต็มจอเดิม (layout viewport) ไม่ได้หักพื้นที่แป้นพิมพ์ออกให้
+        // อัตโนมัติ ทำให้กล่องพิมพ์เลื่อนไปอยู่ใต้แป้นพิมพ์แบบมองไม่เห็น (ทั้งที่ยังพิมพ์ได้ปกติเพราะโฟกัสถูกต้อง
+        // แค่มองไม่เห็นตัวอักษรที่พิมพ์) แก้โดยใช้ VisualViewport API ซึ่งรายงานพื้นที่จอที่ "มองเห็นได้จริง" หลัง
+        // หักแป้นพิมพ์ออกแล้ว มาคำนวณระยะเว้นจากขอบล่างใหม่ทุกครั้งที่แป้นพิมพ์เปิด/ปิด/ขยับ ให้กล่องพิมพ์ลอยอยู่
+        // เหนือแป้นพิมพ์เสมอ (รองรับทั้ง iOS Safari และ Chrome บน Android) =====
+        if (window.visualViewport) {
+            function adjustInputForKeyboard() {
+                const inputWrapper = document.getElementById("inputWrapper");
+                if (!inputWrapper.classList.contains("is-chatting-input")) return;
+                const vv = window.visualViewport;
+                // ส่วนต่างระหว่างความสูงจอเต็ม (layout viewport) กับความสูงจอที่มองเห็นจริง (visual viewport)
+                // คือความสูงของแป้นพิมพ์ที่เด้งขึ้นมาบัง (ถ้าแป้นพิมพ์ปิดอยู่ ค่านี้จะใกล้ 0)
+                const keyboardHeight = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+                // ===== หมายเหตุ: ต้องใช้ setProperty(...,'important') เพราะ CSS ของ .is-chatting-input ตั้ง
+                // bottom ไว้ด้วย !important อยู่แล้ว (กัน style อื่นมาทับตอน inline เฉยๆ จะสู้ไม่ได้) =====
+                inputWrapper.style.setProperty("bottom", (keyboardHeight + 16) + "px", "important");
+            }
+            window.visualViewport.addEventListener("resize", adjustInputForKeyboard);
+            window.visualViewport.addEventListener("scroll", adjustInputForKeyboard);
+        }
 
         // ===== เพิ่มใหม่: คำนวณตำแหน่งเมนู ➕ จากพื้นที่ว่างจริงบนจอ ณ ตอนนั้น (runtime) แทนการเดาตายตัวด้วย CSS
         // กันปัญหาเมนูไปชนข้อความอื่น ไม่ว่าปุ่ม ➕ จะอยู่ตรงไหนของหน้าจอ (หน้าแรกก่อนเริ่มแชท ซึ่งช่องพิมพ์อยู่กลางจอ
