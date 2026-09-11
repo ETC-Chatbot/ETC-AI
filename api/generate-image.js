@@ -72,7 +72,19 @@ async function expandPromptWithGroq(rawPrompt) {
         messages: [
           {
             role: "system",
-            content: "You are a prompt writer for a text-to-image AI model. The user will give you a short request, possibly in Thai. Rewrite it into ONE vivid, detailed English prompt suitable for image generation: describe the subject, setting, colors, and style concretely. If the request mentions a country, culture, or place (e.g. Thailand), include specific recognizable visual elements of it (landmarks, clothing, scenery). ===== เพิ่มใหม่: ต้องระบุชัดเจนเสมอว่าห้ามมีตัวหนังสือ ป้าย หรือกราฟิกข้อความใดๆ ปรากฏในภาพ เพราะโมเดลชอบสุ่มใส่ตัวอักษรมั่วๆ (มักเป็นภาษาจีน/ญี่ปุ่น) ลงไปเวลา prompt ไม่ชัดเจนพอ ===== ===== เพิ่มใหม่: ถ้าคำขอเอ่ยถึงบุคคลจริงที่มีตัวตนและระบุตัวได้ชัดเจน (เช่น นักการเมือง ดารา นักกีฬา ผู้บริหารบริษัท คนดัง หรือใครก็ตามที่เป็นบุคคลสาธารณะที่มีชื่อจริง ไม่ว่าจะระบุชื่อเต็มหรือเรียกแบบย่อ/ตำแหน่ง เช่น 'นายกฯ คนปัจจุบัน') ห้ามเขียน prompt ภาพให้เด็ดขาด ให้ตอบกลับด้วยข้อความนี้เท่านั้น (ไม่ต้องมีอย่างอื่นปนเลย): REAL_PERSON_REQUEST หมายเหตุ: ตัวละครสมมติ, คนทั่วไปที่ไม่มีชื่อ (เช่น 'ผู้ชายใส่สูท'), หรือคนในอาชีพทั่วไปแบบไม่ระบุตัวตน ไม่เข้าเงื่อนไขนี้ สร้าง prompt ได้ตามปกติ ===== เพิ่มใหม่: ถ้าคำขอไม่ได้ระบุเสื้อผ้า/ชุดของคนในภาพไว้ชัดเจน ให้ใส่คนในชุดสุภาพเรียบร้อยปกติ (เช่น casual everyday clothing, appropriate modest outfit) เสมอ ห้ามใส่ชุดว่ายน้ำ ชุดบิกินี่ หรือเสื้อผ้าเผยเนื้อหนังมากเกินควรโดยที่ผู้ใช้ไม่ได้ขอ แม้คำขอจะเป็นคำกลางๆ เช่น 'คนนอนเล่น' หรือ 'คนไปทะเล' ก็ตาม ===== Always end your prompt with: 'photorealistic photograph, no text, no writing, no letters, no captions, no watermark, no infographic elements'. Reply with ONLY the rewritten English prompt (or REAL_PERSON_REQUEST if applicable), no quotes, no explanation, no extra text.",
+            // ===== แก้ไข (บั๊กสำคัญเรื่องโควตาหมดเร็ว): เดิมใส่คำอธิบายภาษาไทยยาวๆ (ที่ตั้งใจเขียนไว้อธิบาย
+            // โค้ดให้คนอ่าน) ปนอยู่ข้างในสตริง prompt จริงที่ส่งให้ Groq ทุกครั้งโดยไม่ตั้งใจ ทำให้แต่ละคำขอกิน
+            // token เยอะเกินจำเป็นมาก (ภาษาไทยกิน token ต่อคำมากกว่าอังกฤษหลายเท่า) พอโควตา TPM ของ tier ฟรีมีแค่
+            // 8,000 token/นาที เลยหมดเร็วผิดปกติ (แค่ 1-2 ภาพก็ใกล้ชนแล้ว) ย้ายคำอธิบายทั้งหมดออกมาเป็นคอมเมนต์
+            // ของโค้ดแทน (แบบนี้) และทำให้ prompt จริงที่ส่งไปกระชับที่สุด ใช้แต่ภาษาอังกฤษเท่านั้น =====
+            //
+            // สรุปสิ่งที่ prompt ข้างล่างนี้สั่งโมเดลไว้:
+            // 1. เขียน prompt ภาพให้กระชับแต่ชัดเจน จากคำขอภาษาไทย/อังกฤษของผู้ใช้
+            // 2. ห้ามมีตัวหนังสือ/ป้ายในภาพ (กันโมเดลวาดภาพสุ่มใส่ตัวอักษรมั่วๆ)
+            // 3. ถ้าขอภาพบุคคลจริงที่มีตัวตน (นักการเมือง ดารา คนดัง) ให้ตอบ REAL_PERSON_REQUEST แทนการเขียน
+            //    prompt เพราะโมเดลวาดภาพไม่รู้จักหน้าตาคนจริง และป้องกันความเสี่ยงเรื่องภาพปลอม/deepfake
+            // 4. ถ้าคำขอไม่ระบุชุด ให้ใส่ชุดสุภาพเสมอ ห้ามชุดว่ายน้ำ/เสื้อผ้าเผยเนื้อหนังเกินควร
+            content: "You are a prompt writer for a text-to-image AI model. The user gives a short request, possibly in Thai. Rewrite it into ONE vivid English prompt describing subject, setting, colors, and style concretely. If it mentions a place or culture (e.g. Thailand), include recognizable visual elements. If the request names a real, identifiable public figure (politician, celebrity, athlete, CEO, or similar — by full name, nickname, or title like 'the current PM'), reply with exactly: REAL_PERSON_REQUEST and nothing else. Fictional characters and unnamed generic people don't count; write a normal prompt for those. If clothing isn't specified, use modest everyday clothing — never swimwear, bikinis, or revealing outfits unless explicitly requested. Always end the prompt with: 'photorealistic photograph, no text, no writing, no letters, no captions, no watermark, no infographic elements'. Reply with ONLY the prompt (or REAL_PERSON_REQUEST), no quotes, no explanation.",
           },
           { role: "user", content: rawPrompt },
         ],
@@ -138,7 +150,7 @@ async function expandPromptWithGroq(rawPrompt) {
 
 export default async function handler(req) {
   // ===== เพิ่มใหม่: ตัวบอกเวอร์ชันโค้ด เช็คได้จาก Vercel > โปรเจกต์ > แท็บ Logs ว่าไฟล์นี้ถูก deploy จริงหรือยัง =====
-  console.log("[generate-image build: 2026-09-11-fail-fast-on-expansion-error]");
+  console.log("[generate-image build: 2026-09-11-shrink-prompt-token-usage]");
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
