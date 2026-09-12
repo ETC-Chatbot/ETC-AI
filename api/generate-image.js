@@ -32,7 +32,9 @@ const IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell";
 // ของ Groq ถูกใช้ร่วมกันหมด พอคุยเยอะก็ทำให้สร้างภาพไม่ได้ไปด้วย (และกลับกัน) เปลี่ยนมาใช้ openai/gpt-oss-20b
 // แทน ซึ่งเป็นคนละโมเดล จึงมีโควตาแยกต่างหากจากแชทโดยอัตโนมัติ (ไม่ต้องตั้งค่าอะไรเพิ่ม) แถมเร็วกว่าด้วย
 // (~1000 token/วินาที เทียบกับ qwen ที่ ~500 token/วินาที) เหมาะกับงานเขียน prompt สั้นๆ แบบนี้พอดี =====
-const IMAGE_PROMPT_MODEL = "openai/gpt-oss-20b";
+// ===== แก้ไข: เปลี่ยนจาก openai/gpt-oss-20b เป็น openai/gpt-oss-120b (ฉลาดกว่า พารามิเตอร์เยอะกว่า)
+// โควตาฟรีเท่ากันเป๊ะกับ 20b (30 RPM, 1K RPD, 8K TPM, 200K TPD) จึงไม่เสียอะไรเลยจากการเปลี่ยน =====
+const IMAGE_PROMPT_MODEL = "openai/gpt-oss-120b";
 
 // ===== เพิ่มใหม่: ตัวกรองคำต้องห้ามเบื้องต้น (ทำหน้าที่แทนตัวกรองในตัวของ Gemini ที่ไม่มีใน Workers AI)
 const BLOCKED_KEYWORDS = [
@@ -150,7 +152,7 @@ async function expandPromptWithGroq(rawPrompt) {
 
 export default async function handler(req) {
   // ===== เพิ่มใหม่: ตัวบอกเวอร์ชันโค้ด เช็คได้จาก Vercel > โปรเจกต์ > แท็บ Logs ว่าไฟล์นี้ถูก deploy จริงหรือยัง =====
-  console.log("[generate-image build: 2026-09-11-shrink-prompt-token-usage]");
+  console.log("[generate-image build: 2026-09-11-use-gpt-oss-120b]");
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
