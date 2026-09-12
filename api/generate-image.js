@@ -91,7 +91,7 @@ async function expandPromptWithGroq(rawPrompt) {
           { role: "user", content: rawPrompt },
         ],
         temperature: 0.7,
-        max_tokens: 200,
+        max_tokens: 300,
         stream: false,
         // ===== แก้ไข (บั๊กสำคัญที่เจอจาก Vercel Logs): qwen3.6-27b เป็น reasoning model ที่ "คิดออกเสียง"
         // ก่อนตอบเสมอ (ส่งข้อความ <think>...</think> มาก่อนคำตอบจริง) ถ้าไม่ปิดไว้ ส่วนคิดจะโดน max_tokens:200
@@ -105,6 +105,13 @@ async function expandPromptWithGroq(rawPrompt) {
         // Groq ปฏิเสธคำขอ (res.ok เป็น false) โค้ดเลย fallback กลับไปใช้ prompt ภาษาไทยดิบๆ แบบเงียบๆ (เห็นได้จาก
         // log ที่ raw กับ enhanced เหมือนกันเป๊ะทุกครั้ง) ทำให้ Flux ได้รับข้อความไทยที่มันไม่เข้าใจ แล้ววาดภาพมั่วออกมา
         // ไม่ตรงกับคำขอเลย (นี่คือสาเหตุจริงของปัญหา "ภาพไม่ตรง" ที่เจอมาตลอดหลังเปลี่ยนโมเดล) =====
+        // ===== แก้ไข (บั๊กสำคัญรอบ 3 ที่เจอจาก Vercel Logs): include_reasoning: false แค่ "ซ่อน" ข้อความคิด
+        // ไม่ให้โผล่มาในคำตอบ แต่ token ที่ใช้คิดข้างในยังถูกนับรวมกับ max_tokens อยู่ดี พอ GPT-OSS คิดเยอะ
+        // (เป็นนิสัยของ reasoning model ทุกตัว) โควตา 200 token เดิมเลยถูกส่วนคิดกินไปเกือบหมดก่อน เหลือไม่พอ
+        // ให้เขียน prompt จนจบประโยค เลยขาดกลางคัน (เช่น "a colorful tropical" ไม่มีคำว่า fish ต่อท้ายเลย)
+        // แก้โดยตั้ง reasoning_effort: "low" ให้คิดน้อยที่สุดเท่าที่พอทำงานได้ (งานนี้แค่เรียบเรียงประโยคสั้นๆ
+        // ไม่จำเป็นต้องคิดเยอะ) ร่วมกับเผื่อ max_tokens เพิ่มขึ้นเป็น 300 กันไว้อีกชั้น =====
+        reasoning_effort: "low",
         include_reasoning: false,
       }),
     });
@@ -152,7 +159,7 @@ async function expandPromptWithGroq(rawPrompt) {
 
 export default async function handler(req) {
   // ===== เพิ่มใหม่: ตัวบอกเวอร์ชันโค้ด เช็คได้จาก Vercel > โปรเจกต์ > แท็บ Logs ว่าไฟล์นี้ถูก deploy จริงหรือยัง =====
-  console.log("[generate-image build: 2026-09-11-use-gpt-oss-120b]");
+  console.log("[generate-image build: 2026-09-12-fix-truncated-prompt]");
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
