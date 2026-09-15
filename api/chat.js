@@ -17,9 +17,13 @@ export const config = {
 };
 
 // ตายตัวไว้ฝั่งเซิร์ฟเวอร์ ป้องกันไม่ให้ใครยิง request มาสั่งโมเดลอื่นที่แพงกว่า
-const MODEL_NAME = "qwen/qwen3.6-27b";
+// ===== แก้ไข: qwen/qwen3.6-27b ถูก Groq เอาออกจากระบบแล้ว (เช็คจาก Groq Console > Limits > Select Models
+// ค้นหา "3." เจอแค่ qwen3.8-27b ไม่มี 3.6 อีกต่อไป) เปลี่ยนมาใช้รุ่นอัปเดต qwen/qwen3.8-27b แทน =====
+const MODEL_NAME = "qwen/qwen3.8-27b";
 
 export default async function handler(req) {
+  // ===== เพิ่มใหม่: ตัวบอกเวอร์ชันโค้ด เช็คได้จาก Vercel > โปรเจกต์ > แท็บ Logs ว่าไฟล์นี้ถูก deploy จริงหรือยัง =====
+  console.log("[chat build: 2026-09-15-fix-qwen-model-name]");
   // อนุญาตแค่ POST เท่านั้น (กันคนเปิด URL ตรงๆ ผ่าน browser)
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
@@ -39,7 +43,7 @@ export default async function handler(req) {
       });
     }
 
-    // ===== เพิ่มใหม่: qwen3.6-27b รองรับการดูภาพได้ในตัว (multimodal) โดยไม่ต้องเปลี่ยนโมเดล
+    // ===== เพิ่มใหม่: qwen3.8-27b รองรับการดูภาพได้ในตัว (multimodal) โดยไม่ต้องเปลี่ยนโมเดล
     // หน้าเว็บจะส่ง content เป็น array [{type:"text",...}, {type:"image_url",...}] มาแทน string ธรรมดา เมื่อผู้ใช้แนบรูป
     // Groq จำกัดขนาดรูปไว้ที่ 20MB ต่อคำขอ เผื่อไว้ที่ 18MB กันพลาดเรื่อง overhead ของ base64 encoding =====
     const payloadSize = JSON.stringify(messages).length;
@@ -64,7 +68,7 @@ export default async function handler(req) {
         messages: messages,
         temperature: temperature ?? 0.7,
         stream: true, // เปิด streaming เพื่อให้ข้อความค่อยๆ พิมพ์ออกมา
-        // ===== เพิ่มใหม่: qwen3.6-27b เป็นโมเดลที่ "คิดก่อนตอบ" (reasoning model) =====
+        // ===== เพิ่มใหม่: qwen3.8-27b เป็นโมเดลที่ "คิดก่อนตอบ" (reasoning model) =====
         // ถ้าไม่ตั้งค่านี้ ขั้นตอนความคิดทั้งหมด (thinking process) จะปนมาในคำตอบด้วย
         // ตั้งเป็น "hidden" เพื่อให้ Groq ซ่อนส่วนคิด ส่งกลับมาแค่คำตอบสุดท้ายที่สมบูรณ์
         reasoning_format: "hidden",
@@ -77,8 +81,11 @@ export default async function handler(req) {
         // top_p=0.8 ช่วยให้คำตอบสมเหตุสมผล ไม่กระโดดหัวข้อ =====
         presence_penalty: 1.5,
         top_p: 0.8,
-        // ===== เพิ่มใหม่: กำหนดเพดานความยาวคำตอบให้กว้างพอ กันคำตอบถูกตัดสั้นเกินไปก่อนพูดจบประเด็น =====
-        max_tokens: 1536,
+        // ===== แก้ไข: เดิมตั้ง max_tokens ไว้ 1536 ซึ่งสูงกว่าโควตาฟรีของ Groq รุ่นนี้ (Output Tokens Per Minute
+        // จำกัดไว้ที่ 1000 token/นาที) พอ Groq ประเมินว่าคำตอบอาจยาวเกิน budget ที่เหลือในนาทีนั้น จะปฏิเสธคำขอทันที
+        // ด้วย error 429 rate_limit_exceeded (ทั้งที่จริงคำตอบอาจไม่ได้ยาวขนาดนั้นด้วยซ้ำ) ลดเพดานลงมาให้เหลือระยะ
+        // ปลอดภัยใต้ 1000 เพื่อลดโอกาสโดน 429 แบบนี้ =====
+        max_tokens: 900,
       }),
     });
 
