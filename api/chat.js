@@ -26,7 +26,7 @@ const MODEL_NAME = "groq/compound";
 
 export default async function handler(req) {
   // ===== เพิ่มใหม่: ตัวบอกเวอร์ชันโค้ด เช็คได้จาก Vercel > โปรเจกต์ > แท็บ Logs ว่าไฟล์นี้ถูก deploy จริงหรือยัง =====
-  console.log("[chat build: 2026-09-18-use-groq-compound]");
+  console.log("[chat build: 2026-09-18-log-tool-usage]");
   // อนุญาตแค่ POST เท่านั้น (กันคนเปิด URL ตรงๆ ผ่าน browser)
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
@@ -94,7 +94,36 @@ export default async function handler(req) {
     }
 
     // ส่ง stream ที่ได้จาก Groq ต่อไปยังหน้าเว็บทันที ไม่ต้องรอให้ตอบครบ
-    return new Response(groqResponse.body, {
+    // ===== เพิ่มใหม่: แยกสตรีมออกเป็น 2 ทางด้วย .tee() ทางหนึ่ง (clientStream) ส่งให้ผู้ใช้ตามปกติทุกอย่างเหมือนเดิม
+    // ไม่กระทบการสตรีมข้อความให้เห็นค่อยๆ พิมพ์เลย อีกทาง (logStream) เอาไว้ตรวจสอบเบื้องหลังเงียบๆ ว่าคำตอบนี้มี
+    // การเรียกใช้เครื่องมือค้นเว็บจริงไหม (groq/compound จะแทรกคำว่า "executed_tools" มาในข้อมูล stream เวลามีการ
+    // ค้นเว็บ/รันโค้ดเกิดขึ้นจริง) แล้ว log สรุปสั้นๆ ไว้ให้ดูใน Vercel Logs ช่วยตอบคำถามที่ว่า "ทำไมถามเรื่องนี้แล้ว
+    // ไม่ทันสมัย" ได้ชัดเจนว่าเป็นเพราะ (ก) ไม่ได้ค้นเว็บเลย หรือ (ข) ค้นแล้วแต่หาข้อมูลที่ต้องการไม่เจอ =====
+    const [clientStream, logStream] = groqResponse.body.tee();
+
+    // ===== หมายเหตุ: นี่คือการ log แบบ "พยายามให้ดีที่สุด" (best-effort) เพราะ Edge Runtime ไม่รับประกันว่า
+    // โค้ดที่รันแบบไม่ await (background) จะได้รันจนจบเสมอ ถ้าบางครั้งเปิด log แล้วไม่เจอบรรทัดนี้สำหรับบาง
+    // คำขอ ไม่ใช่บั๊ก แค่ runtime ปิดตัวไปก่อนบางครั้งเท่านั้น ส่วนใหญ่ก็ยังเห็น log ได้ตามปกติ =====
+    (async () => {
+      try {
+        const reader = logStream.getReader();
+        const decoder = new TextDecoder();
+        let fullText = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          fullText += decoder.decode(value, { stream: true });
+        }
+        // เช็คแบบง่ายๆ ด้วยการหาคำที่ Groq ใช้บอกว่ามีการเรียกเครื่องมือ (ไม่ต้อง parse JSON เต็มรูปแบบ
+        // เพราะ field ที่แน่นอนอาจเปลี่ยนได้ตามเวอร์ชัน API แต่คำเหล่านี้ควรมีอยู่แน่ๆ ถ้าเรียกเครื่องมือจริง)
+        const usedTool = fullText.includes('"executed_tools"') || fullText.includes('"tool_calls"');
+        console.log("[chat] ค้นเว็บ/ใช้เครื่องมือ:", usedTool ? "มี (เรียกเครื่องมือจริง)" : "ไม่มี (ตอบจากความรู้เดิมล้วนๆ)");
+      } catch (err) {
+        console.log("[chat] ตรวจสอบการค้นเว็บไม่สำเร็จ:", err.message);
+      }
+    })();
+
+    return new Response(clientStream, {
       status: 200,
       headers: {
         "Content-Type": "text/event-stream",
