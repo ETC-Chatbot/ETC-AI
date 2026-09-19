@@ -1008,7 +1008,7 @@
         // วิธีเช็ค: กด F12 เปิด Console แล้วรีเฟรชหน้าเว็บ จะเห็นข้อความนี้ขึ้นเป็นบรรทัดแรกๆ เสมอ
         // ถ้าไม่เห็น หรือเห็นเลขเวอร์ชันเก่ากว่านี้ แปลว่าเว็บยังไม่ได้โหลดโค้ดตัวล่าสุด (ยังไม่ deploy สำเร็จ
         // หรือเบราว์เซอร์แคชเก่าค้างอยู่) ทุกครั้งที่แก้โค้ดรอบใหม่ ให้เปลี่ยนเลขวันที่ตรงนี้ด้วย จะได้เทียบง่ายๆ =====
-        console.log("%c[ETC AI build: 2026-09-18-fix-greeting-topic-carryover]", "color:#a8c7fa; font-weight:bold;");
+        console.log("%c[ETC AI build: 2026-09-18-frontend-timeout-safety-net]", "color:#a8c7fa; font-weight:bold;");
         // ============================================================
         // ตัวแปรหลัก
         // ============================================================
@@ -2111,6 +2111,15 @@
             const btn = document.getElementById("actionBtn");
             isAiThinking = true; btn.innerText = "■"; btn.style.color = "#ff6b9d";
             currentController = new AbortController();
+            // ===== เพิ่มใหม่ (กันค้าง): ถ้าไม่มีการตอบกลับใดๆเลยภายใน 20 วินาที ให้ยกเลิกคำขอเองอัตโนมัติ แล้วแจ้ง
+            // ผู้ใช้ตรงๆ แทนที่จะปล่อยให้จอค้างเงียบๆ ไม่รู้ว่าเกิดอะไรขึ้น (เกิดได้เวลาคำถามที่ต้องค้นเว็บหลายรอบ
+            // ผ่าน groq/compound ใช้เวลานานผิดปกติ หรือ Groq/Vercel มีปัญหาฝั่งเซิร์ฟเวอร์) ตัวแปร isTimeoutAbort
+            // ใช้แยกว่ากรณีนี้เป็นการยกเลิกเพราะ timeout ไม่ใช่ผู้ใช้กดปุ่ม ■ หยุดเอง จะได้โชว์ข้อความคนละแบบกัน =====
+            let isTimeoutAbort = false;
+            const timeoutId = setTimeout(() => {
+                isTimeoutAbort = true;
+                currentController.abort();
+            }, 20000);
             const av = userProfile.avatarDataUrl ? `<div class="avatar-user" style="background-image:url(${userProfile.avatarDataUrl});background-size:cover;background-position:center;"></div>` : `<div class="avatar-user">${userProfile.name ? userProfile.name.substring(0,2).toUpperCase() : "ME"}</div>`;
             // ===== เพิ่มใหม่: ถ้ามีรูปแนบมา ให้โชว์รูปเล็กๆในบับเบิลข้อความของผู้ใช้ด้วย =====
             const imgHtml = imageBase64 ? `<img src="${imageBase64}" style="max-width:200px; border-radius:10px; display:block; margin-bottom:6px;">` : "";
@@ -2143,6 +2152,10 @@
                         deepThinking: localStorage.getItem("etc_deep_think") === "true"
                     })
                 });
+
+                // ===== เพิ่มใหม่: พอ fetch resolve (ได้ header กลับมาแล้ว ไม่ว่าจะสำเร็จหรือ error) แปลว่าเซิร์ฟเวอร์
+                // เริ่มตอบสนองแล้ว ผ่านช่วงเสี่ยงค้างไปแล้ว ยกเลิก timeout กันค้างที่ตั้งไว้ได้เลย =====
+                clearTimeout(timeoutId);
 
                 // ===== เพิ่มใหม่: เช็ค error ก่อนอ่าน stream เผื่อ Groq ตอบ error (เช่น key ผิด, โมเดลถูกยุบ) =====
                 if (!res.ok) {
@@ -2200,7 +2213,10 @@
                 // ให้โชว์ข้อความสุภาพแทนการโชว์ JSON ดิบๆ ที่ดูเหมือนเว็บพัง กันผู้ใช้ตกใจ =====
                 let displayMsg;
                 if (e.name === "AbortError") {
-                    displayMsg = "คำตอบถูกยกเลิกค่ะ";
+                    // ===== เพิ่มใหม่: แยกข้อความกรณี timeout อัตโนมัติ ออกจากกรณีผู้ใช้กดปุ่ม ■ หยุดเอง =====
+                    displayMsg = isTimeoutAbort
+                        ? "ขออภัยค่ะ ระบบใช้เวลานานเกินไปในการค้นหาข้อมูล (อาจเป็นคำถามที่ต้องค้นเว็บหลายรอบ) ลองถามให้เจาะจงน้อยลง หรือลองใหม่อีกครั้งนะคะ"
+                        : "คำตอบถูกยกเลิกค่ะ";
                 } else if (e.message.includes("429") || e.message.includes("rate_limit_exceeded")) {
                     displayMsg = "ตอนนี้มีคนใช้งาน ETC พร้อมกันเยอะไปหน่อยค่ะ รบกวนรอสักครู่ (ประมาณ 1 นาที) แล้วลองส่งข้อความอีกครั้งนะคะ 🙏";
                 } else {
@@ -2208,6 +2224,7 @@
                 }
                 document.getElementById(botId).textContent = displayMsg;
             } finally {
+                clearTimeout(timeoutId); // ===== เพิ่มใหม่: กันไทเมอร์ค้างอยู่เผื่อ error เกิดก่อนถึงจุดที่ clear ไว้แล้ว =====
                 isAiThinking = false; btn.innerText = "➔"; btn.style.color = "#a8c7fa";
             }
         }
