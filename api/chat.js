@@ -16,43 +16,64 @@ export const config = {
   runtime: "edge",
 };
 
-// ===== แก้ไข (กลับไปใช้ qwen เป็นหลัก): ลองใช้ groq/compound เป็นโมเดลหลักแล้วพบว่า "เข้าใจบทบาท ETC" แย่กว่า
-// qwen มาก — ตีความคำสั่งใน system prompt ตรงตัวเกินไป (เช่น ทักทาย "สวัสดี" กลับด้วยการอธิบายว่า "คำตอบของคำ
-// ทักทายคือการตอบกลับด้วยคำว่าสวัสดี" แทนที่จะทักทายตรงๆ, หรือสรุป system prompt ของตัวเองออกมาให้ผู้ใช้เห็น)
-// เปลี่ยนกลับมาใช้ qwen3.8-27b เป็นค่าเริ่มต้นสำหรับคำถามทั่วไป (เข้าใจบทบาทเป็นธรรมชาติกว่ามาก) แล้วสลับไปใช้
-// groq/compound เฉพาะข้อความที่น่าจะต้องการข้อมูลปัจจุบัน/ล่าสุดจากเว็บจริงๆ เท่านั้น (ดูฟังก์ชัน needsWebSearch
-// ด้านล่าง) แบบนี้ได้ทั้ง 2 อย่าง: บทสนทนาทั่วไปเป็นธรรมชาติแบบเดิม + ยังตอบคำถามที่ต้องข้อมูลสดได้อยู่ =====
+// ===== แก้ไข (สถาปัตยกรรมใหม่): เดิมสลับไปใช้ groq/compound เวลาต้องค้นเว็บ แต่เจอปัญหาเรื่องบุคลิกไม่เป็น ETC
+// (ตีความคำสั่งตรงตัวเกินไป) และการค้นเว็บของ compound ครอบคลุมน้อยกว่า Google (หาข้อมูลเฉพาะทางไม่เจอ) เปลี่ยน
+// มาใช้วิธีนี้แทน: ค้นเว็บเองผ่าน Serper API (ผลลัพธ์เหมือน Google จริงๆ) แล้วเอาผลที่ได้ยัดเป็น "ข้อมูลอ้างอิง"
+// ให้ qwen อ่านแล้วสรุปตอบ วิธีนี้ได้ทั้ง 2 อย่าง: ค้นเว็บครอบคลุมกว่าเดิมมาก + บุคลิก ETC เป็นธรรมชาติเหมือนเดิม
+// ทุกครั้ง (เพราะ qwen เป็นคนเขียนคำตอบสุดท้ายเสมอ ไม่มีการสลับโมเดลอีกต่อไป) =====
 const DEFAULT_MODEL = "qwen/qwen3.8-27b";
-// ===== แก้ไข (บั๊กร้ายแรงอีกจุด): groq/compound รองรับค้นเว็บได้หลายครั้งต่อคำถามเดียว ถ้าเจอคำถามที่ต้อง
-// ค้นหลายรอบ อาจใช้เวลานานกว่าจะเริ่มส่งคำตอบตัวแรกกลับมา ซึ่ง Vercel Edge Functions กำหนดไว้ว่าเซิร์ฟเวอร์ต้อง
-// เริ่มส่งข้อมูลกลับภายใน 25 วินาที ไม่งั้นจะถูกตัดการเชื่อมต่อทิ้งเงียบๆ (ไม่มี error ให้เห็นด้วย เหมือนค้างไปเลย)
-// เปลี่ยนมาใช้ groq/compound-mini แทน ซึ่งจำกัดไว้แค่ 1 ครั้งต่อคำถาม (เร็วกว่าเฉลี่ย 3 เท่า) ลดความเสี่ยงเรื่องนี้
-// ได้เยอะ แลกกับกรณีคำถามที่ต้องค้นเว็บหลายแหล่งจริงๆ อาจได้คำตอบละเอียดน้อยกว่า groq/compound เล็กน้อย =====
-// ===== แก้ไข: กลับมาใช้ groq/compound ตัวเต็ม (ค้นเว็บได้หลายรอบ ละเอียด/มีโอกาสเจอข้อมูลเฉพาะทางมากกว่า
-// compound-mini ที่จำกัดแค่ 1 ครั้ง) เพื่อเพิ่มโอกาสหาข้อมูลเฉพาะเจาะจง (เช่นชื่อบุคคลในหน่วยงานท้องถิ่น) เจอ
-// มากขึ้น แลกกับความเสี่ยงเรื่องใช้เวลานานที่เคยทำให้ค้างไปก่อนหน้านี้ — คราวนี้ป้องกันด้วยระบบยกเลิกอัตโนมัติ
-// ฝั่ง frontend แทน (ดูใน index.html ฟังก์ชัน handleSendAction) ถ้าค้นนานเกินไปจะแจ้งเตือนแทนที่จะค้างเงียบๆ =====
-const SEARCH_MODEL = "groq/compound";
 
 // ===== เพิ่มใหม่: ตรวจแบบคร่าวๆ (keyword matching) ว่าข้อความน่าจะต้องใช้ข้อมูลปัจจุบัน/ล่าสุดจากเว็บไหม
-// เป็นการเดาแบบหยาบๆ ไม่แม่น 100% เหมือนกับระบบตรวจจับคำสั่งสร้างภาพที่ปรับจูนกันมาหลายรอบ ถ้าเจอคำขอที่ควร
-// ค้นเว็บแต่ไม่ถูกจับได้ (หรือจับผิดทั้งที่ไม่จำเป็น) เพิ่ม/ลดคำในลิสต์นี้ได้เรื่อยๆ ตามที่เจอจริง =====
+// เป็นการเดาแบบหยาบๆ ไม่แม่น 100% ถ้าเจอคำขอที่ควรค้นเว็บแต่ไม่ถูกจับได้ (หรือจับผิดทั้งที่ไม่จำเป็น)
+// เพิ่ม/ลดคำในลิสต์นี้ได้เรื่อยๆ ตามที่เจอจริง =====
 function needsWebSearch(text) {
   if (!text) return false;
   const lower = text.toLowerCase();
   const keywords = [
     "ล่าสุด", "ตอนนี้", "ปัจจุบัน", "เดี๋ยวนี้", "ขณะนี้", "วันนี้",
     "ข่าว", "ราคา", "หุ้น", "อัตราแลกเปลี่ยน", "พยากรณ์อากาศ", "อากาศวันนี้",
-    "ใครเป็น", "ใครดำรงตำแหน่ง", "นายกฯ", "นายกรัฐมนตรี", "ประธานาธิบดี", "ผอ.", "ผู้อำนวยการ",
+    "ใครเป็น", "ใครดำรงตำแหน่ง", "นายกฯ", "นายกรัฐมนตรี", "ประธานาธิบดี", "ผอ.", "ผู้อำนวยการ", "หัวหน้าแผนก",
     "เกิดอะไรขึ้น", "มีอะไรใหม่", "อัปเดต",
     "latest", "current", "right now", "news", "today's",
   ];
   return keywords.some(kw => lower.includes(kw.toLowerCase()));
 }
 
+// ===== เพิ่มใหม่: ยิงคำค้นไปที่ Serper API (คืนผลลัพธ์แบบเดียวกับหน้า Google Search จริงๆ) แล้วสรุปผลลัพธ์
+// อันดับต้นๆ ออกมาเป็นข้อความสั้นๆ ให้ qwen เอาไปใช้ตอบ ถ้าไม่มี SERPER_API_KEY ตั้งไว้ หรือเรียกไม่สำเร็จไม่ว่า
+// เหตุผลอะไรก็ตาม คืนค่า null กลับไปเงียบๆ (โค้ดฝั่งเรียกจะจัดการต่อเองว่าให้ตอบแบบไม่มีข้อมูลค้นเว็บ) =====
+async function searchWithSerper(query) {
+  const apiKey = process.env.SERPER_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const res = await fetch("https://google.serper.dev/search", {
+      method: "POST",
+      headers: {
+        "X-API-KEY": apiKey,
+        "Content-Type": "application/json",
+      },
+      // gl/hl ตั้งเป็นไทย ช่วยให้ผลลัพธ์ที่เกี่ยวข้องกับประเทศไทยขึ้นมาแม่นกว่า
+      body: JSON.stringify({ q: query, gl: "th", hl: "th" }),
+    });
+    if (!res.ok) {
+      console.log("[chat] Serper เรียกไม่สำเร็จ status:", res.status);
+      return null;
+    }
+    const data = await res.json();
+    const organic = (data.organic || []).slice(0, 5);
+    if (organic.length === 0) return null;
+    return organic
+      .map((r, i) => `${i + 1}. ${r.title}\n${r.snippet || ""}\n(ที่มา: ${r.link})`)
+      .join("\n\n");
+  } catch (err) {
+    console.log("[chat] Serper search error:", err.message);
+    return null;
+  }
+}
+
 export default async function handler(req) {
   // ===== เพิ่มใหม่: ตัวบอกเวอร์ชันโค้ด เช็คได้จาก Vercel > โปรเจกต์ > แท็บ Logs ว่าไฟล์นี้ถูก deploy จริงหรือยัง =====
-  console.log("[chat build: 2026-09-18-compound-full-with-frontend-timeout]");
+  console.log("[chat build: 2026-09-20-serper-search-with-qwen]");
   // อนุญาตแค่ POST เท่านั้น (กันคนเปิด URL ตรงๆ ผ่าน browser)
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
@@ -83,38 +104,46 @@ export default async function handler(req) {
       });
     }
 
-    // ===== เพิ่มใหม่: หาข้อความล่าสุดของผู้ใช้ (ไม่ใช่ของ ETC) มาเช็คว่าต้องใช้ groq/compound (ค้นเว็บได้)
-    // หรือใช้ qwen3.8-27b ตามปกติ (content อาจเป็น string ธรรมดา หรือเป็น array ถ้ามีการแนบรูปด้วย) =====
+    // ===== แก้ไข: หาข้อความล่าสุดของผู้ใช้ (ไม่ใช่ของ ETC) มาเช็คว่าต้องค้นเว็บผ่าน Serper ก่อนตอบไหม
+    // (content อาจเป็น string ธรรมดา หรือเป็น array ถ้ามีการแนบรูปด้วย) =====
     const lastUserMsg = [...messages].reverse().find(m => m.role === "user");
     const lastUserText = typeof lastUserMsg?.content === "string"
       ? lastUserMsg.content
       : (Array.isArray(lastUserMsg?.content) ? (lastUserMsg.content.find(c => c.type === "text")?.text || "") : "");
-    const useSearchModel = needsWebSearch(lastUserText);
-    const selectedModel = useSearchModel ? SEARCH_MODEL : DEFAULT_MODEL;
 
-    // ===== เพิ่มใหม่: สร้าง request body แยกกันตามโมเดลที่เลือก เพราะพารามิเตอร์ปรับแต่งของ qwen (reasoning_format,
-    // reasoning_effort, presence_penalty, top_p) ใช้ไม่ได้กับ groq/compound (ไม่มีในเอกสาร อาจถูกปฏิเสธคำขอได้) =====
+    // ===== เพิ่มใหม่: ถ้าเข้าข่ายต้องการข้อมูลปัจจุบัน ค้นเว็บผ่าน Serper ก่อน แล้วยัดผลลัพธ์เป็นข้อความระบบ
+    // (system message) แทรกไว้ก่อนข้อความล่าสุดของผู้ใช้ ให้ qwen อ่านแล้วใช้ประกอบการตอบ ถ้าค้นไม่สำเร็จ/ไม่มี
+    // key ตั้งไว้ ก็แค่ไม่แทรกอะไรเพิ่ม (qwen จะตอบตามความรู้เดิม หรือบอกตรงๆ ว่าไม่มีข้อมูลเหมือนเดิม) =====
+    let finalMessages = messages;
+    if (needsWebSearch(lastUserText)) {
+      const searchResults = await searchWithSerper(lastUserText);
+      console.log("[chat] ค้นเว็บผ่าน Serper:", searchResults ? "พบผลลัพธ์" : "ไม่พบ/ไม่ได้ค้น");
+      if (searchResults) {
+        const searchContextMsg = {
+          role: "system",
+          content: `[ผลการค้นเว็บล่าสุดสำหรับคำถามล่าสุดของผู้ใช้ ใช้ข้อมูลนี้ประกอบการตอบตามความเหมาะสม ถ้าไม่พบคำตอบที่ต้องการในนี้ ให้บอกตามตรงว่าไม่พบข้อมูล ห้ามเดาเอาเอง]\n\n${searchResults}`,
+        };
+        finalMessages = [...messages.slice(0, -1), searchContextMsg, messages[messages.length - 1]];
+      }
+    }
+
+    // ===== เพิ่มใหม่: สร้าง request body สำหรับ qwen (โมเดลเดียวที่ใช้ตอนนี้ ไม่มีการสลับโมเดลอีกต่อไป) =====
     const requestBody = {
-      model: selectedModel,
-      messages: messages,
+      model: DEFAULT_MODEL,
+      messages: finalMessages,
       temperature: temperature ?? 0.7,
       stream: true, // เปิด streaming เพื่อให้ข้อความค่อยๆ พิมพ์ออกมา
-    };
-    if (useSearchModel) {
-      // groq/compound มีโควตา TPM สูงกว่า qwen มาก (70,000 เทียบกับ 1,000 token/นาที) เผื่อพื้นที่คำตอบยาวได้มากขึ้น
-      requestBody.max_tokens = 1500;
-    } else {
       // qwen3.8-27b เป็นโมเดลที่ "คิดก่อนตอบ" (reasoning model) ถ้าไม่ตั้งค่านี้ ขั้นตอนความคิด (thinking
       // process) จะปนมาในคำตอบด้วย ตั้งเป็น "hidden" เพื่อให้ Groq ซ่อนส่วนคิด ส่งกลับมาแค่คำตอบสุดท้าย
-      requestBody.reasoning_format = "hidden";
+      reasoning_format: "hidden",
       // ผูกกับสวิตช์ "ระบบคิดละเอียด" ในหน้าตั้งค่า ถ้าเปิดไว้ (deepThinking===true) ให้เปิดโหมดคิดลึก
-      requestBody.reasoning_effort = deepThinking === true ? "default" : "none";
+      reasoning_effort: deepThinking === true ? "default" : "none",
       // ค่าที่ผู้ผลิตโมเดล (Qwen) แนะนำเฉพาะตอนปิดโหมดคิดลึก (non-thinking mode) presence_penalty=1.5 ช่วยกัน
       // โมเดล "พูดวนซ้ำคำเดิมไม่จบ" top_p=0.8 ช่วยให้คำตอบสมเหตุสมผล ไม่กระโดดหัวข้อ
-      requestBody.presence_penalty = 1.5;
-      requestBody.top_p = 0.8;
-      requestBody.max_tokens = 900;
-    }
+      presence_penalty: 1.5,
+      top_p: 0.8,
+      max_tokens: 900,
+    };
 
     // ยิง request ไปที่ Groq โดยใส่ API key ที่ซ่อนไว้ใน Environment Variable
     const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -128,9 +157,8 @@ export default async function handler(req) {
       body: JSON.stringify(requestBody),
     });
 
-    // ===== เพิ่มใหม่: log ว่าคำขอนี้เลือกใช้โมเดลไหน ช่วยเช็คได้ว่าระบบตรวจจับ needsWebSearch() ทำงานตรงตามที่
-    // ควรจะเป็นไหม (เช่นเจอคำถามที่ควรค้นเว็บแต่ดันไม่ถูกจับ หรือจับผิดทั้งที่ไม่จำเป็นต้องค้น) =====
-    console.log("[chat] เลือกโมเดล:", selectedModel, "| ข้อความ:", JSON.stringify(lastUserText).slice(0, 100));
+    // ===== แก้ไข: log ว่าคำถามนี้ค้นเว็บไหม (เลือกโมเดลตอนนี้คงที่เป็น qwen เสมอแล้ว ไม่ต้อง log ตัวโมเดลอีก) =====
+    console.log("[chat] ข้อความ:", JSON.stringify(lastUserText).slice(0, 100));
 
     // ถ้า Groq ตอบ error (เช่น key ผิด, โมเดลถูกยุบ) ส่ง error กลับไปตรงๆ
     if (!groqResponse.ok) {
