@@ -71,9 +71,51 @@ async function searchWithSerper(query) {
   }
 }
 
+// ===== เพิ่มใหม่: Tavily เป็นตัวค้นเว็บสำรอง ใช้ตอน Serper เรียกไม่สำเร็จ (เช่น โควตาฟรีแบบให้ครั้งเดียว 2,500
+// ครั้งของ Serper หมดลง) ข้อดีของ Tavily คือโควตาฟรีรีเซตใหม่ทุกเดือน ไม่ใช่ให้ครั้งเดียวเหมือน Serper จึงใช้ต่อ
+// ได้เรื่อยๆ แบบไม่มีค่าใช้จ่ายในระยะยาว (แลกกับคุณภาพผลลัพธ์ที่อาจไม่ใกล้เคียง Google เท่า Serper) =====
+async function searchWithTavily(query) {
+  const apiKey = process.env.TAVILY_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const res = await fetch("https://api.tavily.com/search", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ query, search_depth: "basic", max_results: 5 }),
+    });
+    if (!res.ok) {
+      console.log("[chat] Tavily เรียกไม่สำเร็จ status:", res.status);
+      return null;
+    }
+    const data = await res.json();
+    const results = (data.results || []).slice(0, 5);
+    if (results.length === 0) return null;
+    return results
+      .map((r, i) => `${i + 1}. ${r.title}\n${r.content || ""}\n(ที่มา: ${r.url})`)
+      .join("\n\n");
+  } catch (err) {
+    console.log("[chat] Tavily search error:", err.message);
+    return null;
+  }
+}
+
+// ===== เพิ่มใหม่: ลอง Serper ก่อนเสมอ (คุณภาพผลลัพธ์ดีกว่า เหมือน Google จริงๆ) ถ้าเรียกไม่สำเร็จไม่ว่าเหตุผล
+// อะไรก็ตาม (รวมถึงโควตาหมด) ค่อยลอง Tavily ต่อเป็นตัวสำรอง ถ้าทั้งคู่ไม่สำเร็จหรือไม่ได้ตั้ง key ไว้เลย คืนค่า
+// null ให้โค้ดที่เรียกใช้จัดการต่อเอง (qwen จะตอบแบบไม่มีข้อมูลค้นเว็บ) =====
+async function searchWeb(query) {
+  const serperResult = await searchWithSerper(query);
+  if (serperResult) return { text: serperResult, provider: "Serper" };
+  const tavilyResult = await searchWithTavily(query);
+  if (tavilyResult) return { text: tavilyResult, provider: "Tavily" };
+  return null;
+}
+
 export default async function handler(req) {
   // ===== เพิ่มใหม่: ตัวบอกเวอร์ชันโค้ด เช็คได้จาก Vercel > โปรเจกต์ > แท็บ Logs ว่าไฟล์นี้ถูก deploy จริงหรือยัง =====
-  console.log("[chat build: 2026-09-20-serper-search-with-qwen]");
+  console.log("[chat build: 2026-09-21-tavily-fallback]");
   // อนุญาตแค่ POST เท่านั้น (กันคนเปิด URL ตรงๆ ผ่าน browser)
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
@@ -115,13 +157,15 @@ export default async function handler(req) {
     // (system message) แทรกไว้ก่อนข้อความล่าสุดของผู้ใช้ ให้ qwen อ่านแล้วใช้ประกอบการตอบ ถ้าค้นไม่สำเร็จ/ไม่มี
     // key ตั้งไว้ ก็แค่ไม่แทรกอะไรเพิ่ม (qwen จะตอบตามความรู้เดิม หรือบอกตรงๆ ว่าไม่มีข้อมูลเหมือนเดิม) =====
     let finalMessages = messages;
+    // ===== แก้ไข: ใช้ searchWeb() แทนการเรียก searchWithSerper() ตรงๆ (ลอง Serper ก่อน ถ้าไม่สำเร็จลอง Tavily
+    // ต่อเป็นตัวสำรองอัตโนมัติ กันกรณีโควตาฟรีของ Serper หมดแล้วเว็บใช้งานค้นเว็บต่อไม่ได้เลย) =====
     if (needsWebSearch(lastUserText)) {
-      const searchResults = await searchWithSerper(lastUserText);
-      console.log("[chat] ค้นเว็บผ่าน Serper:", searchResults ? "พบผลลัพธ์" : "ไม่พบ/ไม่ได้ค้น");
-      if (searchResults) {
+      const searchResult = await searchWeb(lastUserText);
+      console.log("[chat] ค้นเว็บ:", searchResult ? `พบผลลัพธ์ (${searchResult.provider})` : "ไม่พบ/ไม่ได้ค้น");
+      if (searchResult) {
         const searchContextMsg = {
           role: "system",
-          content: `[ผลการค้นเว็บล่าสุดสำหรับคำถามล่าสุดของผู้ใช้ ใช้ข้อมูลนี้ประกอบการตอบตามความเหมาะสม ถ้าไม่พบคำตอบที่ต้องการในนี้ ให้บอกตามตรงว่าไม่พบข้อมูล ห้ามเดาเอาเอง]\n\n${searchResults}`,
+          content: `[ผลการค้นเว็บล่าสุดสำหรับคำถามล่าสุดของผู้ใช้ ใช้ข้อมูลนี้ประกอบการตอบตามความเหมาะสม ถ้าไม่พบคำตอบที่ต้องการในนี้ ให้บอกตามตรงว่าไม่พบข้อมูล ห้ามเดาเอาเอง]\n\n${searchResult.text}`,
         };
         finalMessages = [...messages.slice(0, -1), searchContextMsg, messages[messages.length - 1]];
       }
